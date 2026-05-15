@@ -472,7 +472,10 @@ function applyTreeFilters() {
       || (checked.includes("captured") && status.startsWith("captured"))
       || (checked.includes("vanished") && status === "vanished")
       || (checked.includes("skipped") && status.startsWith("skipped"));
-    if (show && onlyFindings) show = li.dataset.hasFindings === "1";
+    if (show && onlyFindings) {
+      // 自己有 findings 或子树里有 findings 都显示(否则父节点 display:none 会连带隐藏子项)
+      show = li.dataset.hasFindings === "1" || li.dataset.hasFindingsSubtree === "1";
+    }
     if (show && q) {
       const text = li.querySelector(".row").textContent.toLowerCase();
       show = text.includes(q);
@@ -536,6 +539,20 @@ function switchDevice(idx) {
   const content = document.getElementById("content");
   content.innerHTML = "";
   d.trees.forEach(t => content.appendChild(renderTree(t)));
+
+  // ★ 2026-05-15:propagate findings 标记给 ancestor li
+  //   filter 用 display:none 隐藏父节点会把子树也连带隐藏 → finding 子项看不见
+  //   每个有 findings 的 li,把祖先全标 data-has-findings-subtree="1"
+  document.querySelectorAll('li.item[data-has-findings="1"]').forEach(li => {
+    let p = li.parentElement;
+    while (p) {
+      if (p.tagName === "LI" && p.classList.contains("item")) {
+        p.dataset.hasFindingsSubtree = "1";
+      }
+      p = p.parentElement;
+    }
+  });
+
   renderFindings();
   applyTreeFilters();
 
