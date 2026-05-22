@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Aqara Viewer — 智能摄像机G2H Pro(国际版)</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+         background: #f5f5f7; color: #222; display: flex; flex-direction: column; }
+  header { background: #1d1d1f; color: #fff; padding: 10px 18px; flex-shrink: 0; }
+  header h1 { margin: 0 0 3px 0; font-size: 16px; font-weight: 600; }
+  header .meta { font-size: 11px; opacity: 0.55; font-family: monospace; }
+  header .versions { font-size: 11px; margin-top: 5px; display: flex; gap: 8px; flex-wrap: wrap; }
+  header .versions span { background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 3px;
+                           font-family: monospace; opacity: 0.85; }
+  header .versions span.absent { opacity: 0.4; font-style: italic; }
+
+  .device-tabs { background: #2a2a2c; border-bottom: 1px solid #444; display: flex; gap: 0;
+                  overflow-x: auto; flex-shrink: 0; scrollbar-width: thin; }
+  .device-tab { padding: 8px 14px; cursor: pointer; font-size: 12px; color: #ccc;
+                 border-right: 1px solid #444; white-space: nowrap; flex-shrink: 0; display: flex;
+                 align-items: center; gap: 6px; transition: background 0.15s; }
+  .device-tab:hover { background: #3a3a3c; color: #fff; }
+  .device-tab.active { background: #f5f5f7; color: #222; font-weight: 600; }
+  .device-tab .count { background: rgba(0,0,0,0.15); padding: 1px 6px; border-radius: 8px;
+                        font-size: 10px; font-weight: normal; }
+  .device-tab.active .count { background: rgba(245,166,35,0.25); color: #aa5a00; }
+  .device-tab.error { color: #f88; font-style: italic; }
+  .device-tab .err-mark { color: #f55; font-weight: 600; }
+
+  .controls { background: #fff; padding: 6px 14px; border-bottom: 1px solid #ddd;
+              display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex-shrink: 0; font-size: 11px; }
+  .controls input[type=search] { padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;
+                                  font-size: 11px; width: 200px; }
+  .controls label { cursor: pointer; user-select: none; }
+
+  .workspace { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+  .sidebar { width: 340px; background: #fff; border-right: 1px solid #ddd;
+             overflow-y: auto; flex-shrink: 0; }
+  .sidebar-header { padding: 8px 12px; border-bottom: 1px solid #eee; background: #fafafa;
+                    font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 2; }
+  .sidebar-header .nav-buttons { float: right; }
+  .sidebar-header .nav-buttons button { padding: 2px 7px; border: 1px solid #ccc; background: #fff;
+                                         border-radius: 3px; font-size: 10px; cursor: pointer; margin-left: 3px; }
+  .sidebar-header .nav-buttons button:hover { background: #f0f0f0; }
+  .sidebar-search { padding: 5px 10px; border-bottom: 1px solid #eee; }
+  .sidebar-search input { width: 100%; padding: 3px 7px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; }
+  .finding-group h4 { padding: 5px 12px; margin: 0; background: #f8f8f8; font-size: 10px;
+                       text-transform: uppercase; letter-spacing: 0.5px; color: #777; border-top: 1px solid #eee; }
+  .finding-group.pri-high h4 { color: #c62828; }
+  .finding-group.pri-medium h4 { color: #b08800; }
+  .finding-group.pri-low h4 { color: #555; }
+  .finding-item { padding: 7px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0;
+                  border-left: 3px solid transparent; }
+  .finding-item:hover { background: #f8f8fc; }
+  .finding-item.selected { background: #fff7d6; border-left-color: #f5a623; }
+  .finding-item .issue-badge { display: inline-block; padding: 1px 5px; border-radius: 3px;
+                                font-size: 9px; font-weight: 600; text-transform: uppercase; }
+  .it-chinese_leak, .it-english_leak { background: #ffd6d6; color: #c62828; }
+  .it-typo, .it-duplicate_char { background: #ffe6cc; color: #aa5a00; }
+  .it-awkward, .it-inconsistency, .it-untranslated { background: #fff4cc; color: #b08800; }
+  .finding-item .original { display: block; margin: 3px 0 1px 0; font-size: 12px; font-weight: 500; word-break: break-all; }
+  .finding-item .suggestion { display: block; font-size: 11px; color: #1e6630; margin: 1px 0; }
+  .finding-item .path-hint { display: block; font-size: 10px; color: #888; word-break: break-all; }
+  .sidebar-empty { padding: 24px 14px; text-align: center; color: #888; font-style: italic; font-size: 11px; }
+  /* --- Decision UI (2026-05-19) --- */
+  .finding-actions { display: flex; gap: 4px; margin-top: 6px; }
+  .finding-actions button { font-size: 10px; padding: 3px 8px; border: 1px solid #ccc;
+                             background: #fff; border-radius: 3px; cursor: pointer; color: #333; }
+  .finding-actions button:hover { background: #f0f0f0; }
+  .finding-actions button.fix:hover { background: #e3f2fd; border-color: #1a73e8; color: #1a73e8; }
+  .finding-actions button.ignore:hover { background: #f5f5f5; color: #555; }
+  .decision-pill { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 2px;
+                    margin-left: 4px; vertical-align: middle; font-weight: 600; text-transform: uppercase; }
+  .decision-pill.local-pending  { background: #e3f2fd; color: #1a73e8; }
+  .decision-pill.local-ignored  { background: #eee; color: #666; }
+  .decision-pill.canon-pending  { background: #fff4cc; color: #b08800; }
+  .decision-pill.canon-ignored  { background: #e0e0e0; color: #555; }
+  .decision-pill.canon-verified { background: #d4f4dd; color: #1e6630; }
+  .decision-pill.canon-regressed{ background: #ffd6d6; color: #c62828; }
+  .finding-item.decision-local-ignored, .finding-item.decision-canon-ignored { opacity: 0.55; }
+  .finding-item.decision-canon-verified { opacity: 0.4; }
+  /* Bottom export bar */
+  .export-bar { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #ddd;
+                padding: 7px 12px; font-size: 11px; display: flex; gap: 8px; align-items: center; z-index: 2; }
+  .export-bar button { padding: 4px 10px; border: 1px solid #ccc; background: #fff;
+                       border-radius: 3px; cursor: pointer; font-size: 11px; }
+  .export-bar button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+  .export-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* Modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none;
+              align-items: center; justify-content: center; z-index: 100; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #fff; max-width: 720px; width: 92%; max-height: 80vh;
+           border-radius: 8px; padding: 18px; display: flex; flex-direction: column; }
+  .modal h3 { margin: 0 0 6px 0; font-size: 16px; }
+  .modal .hint { font-size: 11px; color: #666; margin-bottom: 10px; }
+  .modal textarea { flex: 1; font-family: monospace; font-size: 11px; padding: 10px;
+                     border: 1px solid #ccc; border-radius: 4px; min-height: 200px; resize: vertical; }
+  .modal-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .modal-actions .status { margin-right: auto; font-size: 11px; color: #1e6630; }
+  .modal-actions button { padding: 6px 12px; border: 1px solid #ccc; border-radius: 3px;
+                          cursor: pointer; font-size: 12px; background: #fff; }
+  .modal-actions button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+
+  .main { flex: 1; overflow-y: auto; padding: 10px 16px 30px; }
+  .tree-section { background: #fff; border-radius: 8px; margin-bottom: 12px;
+                  box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+  .tree-header { background: #fafafa; padding: 8px 12px; border-bottom: 1px solid #eee;
+                 font-weight: 600; font-size: 12px; }
+  .tree-header .stats { font-weight: 400; font-size: 11px; color: #777; margin-left: 10px; }
+  ul.items { list-style: none; padding: 0; margin: 0; }
+  ul.items ul.items { padding-left: 20px; border-left: 2px solid #eef; }
+  li.item { border-bottom: 1px solid #f0f0f0; transition: background 0.6s; }
+  li.item:last-child { border-bottom: none; }
+  li.item.flash-highlight > .row { background: #fff4cc; }
+  .row { padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .row:hover { background: #f8f8fc; }
+  .row.expandable::before { content: "▶"; font-size: 9px; color: #888; transition: transform 0.15s;
+                             display: inline-block; flex-shrink: 0; width: 9px; }
+  .row.expanded::before { transform: rotate(90deg); }
+  .row.leaf::before { content: "·"; color: #ccc; width: 9px; flex-shrink: 0; }
+  .badge { padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600;
+           text-transform: uppercase; flex-shrink: 0; }
+  .b-captured { background: #d4f4dd; color: #1e6630; }
+  .b-captured_chooser { background: #ffe6cc; color: #aa5a00; }
+  .b-no_navigation, .b-no_navigation_scroll { background: #f0f0f0; color: #666; }
+  .b-skipped_jump { background: #e8eaf6; color: #3949ab; }
+  .b-skipped_danger { background: #ffd6d6; color: #c62828; }
+  .b-skipped_action { background: #fff4cc; color: #b08800; }
+  .b-vanished { background: #f3e5f5; color: #6a1b9a; }
+  .b-cycle_up { background: #e0f7fa; color: #00695c; }
+  .findings-marker { background: #fff4cc; color: #b08800; font-size: 10px; padding: 1px 6px;
+                      border-radius: 3px; font-weight: 600; flex-shrink: 0; }
+  .path { flex: 1; min-width: 0; }
+  .path .last { font-weight: 500; }
+  .path .parents { color: #999; font-size: 11px; }
+  .meta-info { font-size: 11px; color: #888; flex-shrink: 0; }
+  .details { padding: 9px 12px 12px; background: #fbfbfd; display: none; border-top: 1px solid #eef; }
+  .details.open { display: grid; grid-template-columns: 1fr 300px; gap: 12px; }
+  .texts-list { font-size: 12px; }
+  .texts-list table { width: 100%; border-collapse: collapse; }
+  .texts-list td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .texts-list .ko { font-weight: 500; }
+  .texts-list .ko.has-finding { background: #fff4cc; border-left: 3px solid #f5a623; padding-left: 4px; }
+  .texts-list .cls { color: #888; font-size: 10px; }
+  .screenshots { font-size: 12px; }
+  .screenshots img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px;
+                     display: block; margin-bottom: 6px; cursor: zoom-in; }
+  .faq-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+  .faq-grid img { max-width: 100%; cursor: zoom-in; }
+  .hidden { display: none !important; }
+  .empty { color: #999; font-style: italic; font-size: 12px; padding: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">智能摄像机G2H Pro(国际版)</h1>
+  <div class="meta" id="header-meta"></div>
+  <div class="versions" id="versions-bar"></div>
+</header>
+
+
+
+<div class="controls">
+  <input type="search" id="tree-search" placeholder="Filter menu tree...">
+  <label><input type="checkbox" class="status-filter" value="all" checked> all</label>
+  <span style="color:#aaa">|</span>
+  <label><input type="checkbox" class="status-filter" value="captured"> captured</label>
+  <label><input type="checkbox" class="status-filter" value="vanished"> vanished</label>
+  <label><input type="checkbox" class="status-filter" value="skipped"> skipped</label>
+  <label style="margin-left:auto"><input type="checkbox" id="only-with-findings"> only items with findings ⚠</label>
+</div>
+
+<div class="workspace">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span id="findings-title">Findings</span>
+      <span class="nav-buttons">
+        <button onclick="prevFinding()">◀</button>
+        <button onclick="nextFinding()">▶</button>
+        <span id="finding-counter" style="font-size: 10px; margin-left:6px; color:#888;"></span>
+      </span>
+    </div>
+    <div class="sidebar-search"><input type="search" id="finding-search" placeholder="search findings..."></div>
+    <div id="findings-list"></div>
+    <div class="export-bar">
+      <span><span id="export-bar-count">0</span> local decisions</span>
+      <button id="export-btn" class="primary" onclick="exportDecisions()" disabled>📋 Export</button>
+      <button onclick="clearAllDecisions()" title="Clear all local decisions (does NOT touch canonical corrections.json)">↩ Clear</button>
+    </div>
+  </aside>
+  <main class="main" id="content"></main>
+</div>
+
+<div id="export-modal" class="modal-bg">
+  <div class="modal">
+    <h3>Export <span id="export-count">0</span> local decisions</h3>
+    <div class="hint">
+      Copy this JSON or download as file, then send to the audit engineer.<br>
+      Engineer runs: <code>python phase3_merge_decisions.py decisions.json</code> to merge into corrections.json.
+    </div>
+    <textarea id="export-textarea" spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <span class="status" id="copy-status"></span>
+      <button onclick="copyDecisions()">📋 Copy</button>
+      <button onclick="downloadDecisions()">💾 Download .json</button>
+      <button class="primary" onclick="document.getElementById('export-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEVICES = [{"label": "智能摄像机G2H Pro(国际版)", "safe_name": "", "plugin_main": null, "plugin_settings": null, "firmware": "4.5.30_0002.0013", "trees": [{"label": "device_main", "activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "page_texts": [{"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "자동", "type": "text", "class": "TextView"}, {"text": "114KB/s", "type": "text", "class": "TextView"}, {"text": "제어 센터", "type": "text", "class": "TextView"}, {"text": "관련 이벤트", "type": "text", "class": "Button"}, {"text": "앨범", "type": "text", "class": "Button"}, {"text": "집 전체 감시", "type": "text", "class": "Button"}, {"text": "집 전체 사건의 영상", "type": "text", "class": "Button"}, {"text": "실시간", "type": "text", "class": "Button"}, {"text": "타임라인", "type": "text", "class": "Button"}, {"text": "검색", "type": "text", "class": "Button"}, {"text": "AI", "type": "text", "class": "Button"}], "items": [{"path": "관련 이벤트", "depth": 1, "status": "captured", "all_texts_on_card": ["관련 이벤트"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.9, "app_text_count": 3, "app_texts": [{"text": "HomeGuardian 통합", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}, {"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트.png"}, {"path": "관련 이벤트 > HomeGuardian 통합", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["HomeGuardian 통합"]}, {"path": "관련 이벤트 > 움직임 감지", "depth": 2, "status": "captured", "all_texts_on_card": ["움직임 감지", "智能摄像机G2H Pro(国际版)"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 8, "app_texts": [{"text": "편집", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "연관이벤트", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}, {"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "색상", "type": "text", "class": "TextView"}, {"text": "연관이벤트의 라인 색상", "type": "text", "class": "TextView"}, {"text": "삭제", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트", "depth": 3, "status": "captured", "all_texts_on_card": ["연관이벤트"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.4, "app_text_count": 9, "app_texts": [{"text": "연관이벤트 선택", "type": "text", "class": "TextView"}, {"text": "Aqara智能浴霸 T1", "type": "text", "class": "TextView"}, {"text": "LED 전구 T2(E26, CCT)", "type": "text", "class": "TextView"}, {"text": "가스 누설 검지기 T1", "type": "text", "class": "TextView"}, {"text": "고감도 모션 센서", "type": "text", "class": "TextView"}, {"text": "누수 센서 T1", "type": "text", "class": "TextView"}, {"text": "모션/조도 센서 P2", "type": "text", "class": "TextView"}, {"text": "무선 노브 스위치 H1", "type": "text", "class": "TextView"}, {"text": "무선 리모트 스위치 H1 (1구)", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 연관이벤트 선택", "depth": 4, "status": "no_navigation", "all_texts_on_card": ["연관이벤트 선택"]}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > Aqara智能浴霸 T1", "depth": 4, "status": "captured", "all_texts_on_card": ["Aqara智能浴霸 T1"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.4, "app_text_count": 10, "app_texts": [{"text": "Aqara智能浴霸 T1", "type": "text", "class": "TextView"}, {"text": "배스히터 켜기", "type": "text", "class": "TextView"}, {"text": "배스히터 끄기", "type": "text", "class": "TextView"}, {"text": "조명 켜기", "type": "text", "class": "TextView"}, {"text": "조명 끄기", "type": "text", "class": "TextView"}, {"text": "목표 온도에 도달", "type": "text", "class": "TextView"}, {"text": "온풍 모드 켜기", "type": "text", "class": "TextView"}, {"text": "환기 모드 켜기", "type": "text", "class": "TextView"}, {"text": "송풍 모드 켜기", "type": "text", "class": "TextView"}, {"text": "건조 모드 켜기", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_Aqara智能浴霸_T1.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > LED 전구 T2(E26, CCT)", "depth": 4, "status": "captured", "all_texts_on_card": ["LED 전구 T2(E26, CCT)"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 3, "app_texts": [{"text": "LED 전구 T2(E26, CCT)", "type": "text", "class": "TextView"}, {"text": "켜진다", "type": "text", "class": "TextView"}, {"text": "꺼져 있음", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_LED_전구_T2(E26,_CCT).png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 가스 누설 검지기 T1", "depth": 4, "status": "captured", "all_texts_on_card": ["가스 누설 검지기 T1"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.6, "app_text_count": 4, "app_texts": [{"text": "가스 누설 검지기 T1", "type": "text", "class": "TextView"}, {"text": "천연가스 경보", "type": "text", "class": "TextView"}, {"text": "천연가스 경보 해제", "type": "text", "class": "TextView"}, {"text": "장치 알람 그룹화", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_가스_누설_검지기_T1.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 고감도 모션 센서", "depth": 4, "status": "captured", "all_texts_on_card": ["고감도 모션 센서"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 2, "app_texts": [{"text": "고감도 모션 센서", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_고감도_모션_센서.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 누수 센서 T1", "depth": 4, "status": "captured", "all_texts_on_card": ["누수 센서 T1"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 3, "app_texts": [{"text": "누수 센서 T1", "type": "text", "class": "TextView"}, {"text": "누수 감지되었습니다.", "type": "text", "class": "TextView"}, {"text": "물이 빠짐 (배수)", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_누수_센서_T1.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 모션/조도 센서 P2", "depth": 4, "status": "captured", "all_texts_on_card": ["모션/조도 센서 P2"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.8, "app_text_count": 5, "app_texts": [{"text": "모션/조도 센서 P2", "type": "text", "class": "TextView"}, {"text": "사람 있음", "type": "text", "class": "TextView"}, {"text": "무인", "type": "text", "class": "TextView"}, {"text": "배터리 부족", "type": "text", "class": "TextView"}, {"text": "배터리 충분", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_모션_조도_센서_P2.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 무선 노브 스위치 H1", "depth": 4, "status": "captured", "all_texts_on_card": ["무선 노브 스위치 H1"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 6, "app_texts": [{"text": "무선 노브 스위치 H1", "type": "text", "class": "TextView"}, {"text": "한 번 누름", "type": "text", "class": "TextView"}, {"text": "두 번 누름", "type": "text", "class": "TextView"}, {"text": "길게 누름", "type": "text", "class": "TextView"}, {"text": "회전", "type": "text", "class": "TextView"}, {"text": "누른채로 회전", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_무선_노브_스위치_H1.png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 무선 리모트 스위치 H1 (1구)", "depth": 4, "status": "captured", "all_texts_on_card": ["무선 리모트 스위치 H1 (1구)"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.6, "app_text_count": 4, "app_texts": [{"text": "무선 리모트 스위치 H1 (1구)", "type": "text", "class": "TextView"}, {"text": "한 번 누름", "type": "text", "class": "TextView"}, {"text": "두 번 누름", "type": "text", "class": "TextView"}, {"text": "길게 누름", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_무선_리모트_스위치_H1_(1구).png"}, {"path": "관련 이벤트 > 움직임 감지 > 연관이벤트 > 무선 리모트 스위치 H1 (2구)", "depth": 4, "status": "captured", "all_texts_on_card": ["무선 리모트 스위치 H1 (2구)"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.2, "app_text_count": 8, "app_texts": [{"text": "무선 리모트 스위치 H1 (2구)", "type": "text", "class": "TextView"}, {"text": "왼쪽 버튼 한번 누름", "type": "text", "class": "TextView"}, {"text": "오른쪽 버튼 한번 누름", "type": "text", "class": "TextView"}, {"text": "왼쪽 버튼 두 번 누름", "type": "text", "class": "TextView"}, {"text": "오른쪽 버튼 두 번 누름", "type": "text", "class": "TextView"}, {"text": "왼쪽 버튼 길게 누름", "type": "text", "class": "TextView"}, {"text": "오른쪽 버튼 길게 누름", "type": "text", "class": "TextView"}, {"text": "양쪽 버튼 동시에 한번 누름", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_연관이벤트_무선_리모트_스위치_H1_(2구).png"}, {"path": "관련 이벤트 > 움직임 감지 > 움직임 감지", "depth": 3, "status": "captured", "all_texts_on_card": ["움직임 감지", "智能摄像机G2H Pro(国际版)"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.5, "app_text_count": 9, "app_texts": [{"text": "연관이벤트 선택", "type": "text", "class": "TextView"}, {"text": "Aqara智能浴霸 T1", "type": "text", "class": "TextView"}, {"text": "LED 전구 T2(E26, CCT)", "type": "text", "class": "TextView"}, {"text": "가스 누설 검지기 T1", "type": "text", "class": "TextView"}, {"text": "고감도 모션 센서", "type": "text", "class": "TextView"}, {"text": "누수 센서 T1", "type": "text", "class": "TextView"}, {"text": "모션/조도 센서 P2", "type": "text", "class": "TextView"}, {"text": "무선 노브 스위치 H1", "type": "text", "class": "TextView"}, {"text": "무선 리모트 스위치 H1 (1구)", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_움직임_감지.png"}, {"path": "관련 이벤트 > 움직임 감지 > 색상", "depth": 3, "status": "captured", "all_texts_on_card": ["색상", "연관이벤트의 라인 색상"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 1, "app_texts": [{"text": "색상", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "관련_이벤트_움직임_감지_색상.png"}, {"path": "관련 이벤트 > 움직임 감지 > 삭제", "depth": 3, "status": "skipped_danger", "reason": "keyword '삭제' in '삭제'", "all_texts_on_card": ["삭제"]}, {"path": "앨범", "depth": 1, "status": "captured", "all_texts_on_card": ["앨범"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.subdevice.DeviceActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 4, "app_texts": [{"text": "앨범", "type": "text", "class": "TextView"}, {"text": "스크린샷 / 녹화", "type": "text", "class": "TextView"}, {"text": "클라우드 비디오", "type": "text", "class": "TextView"}, {"text": "타임랩스 비디오", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "앨범.png"}, {"path": "집 전체 감시", "depth": 1, "status": "captured", "all_texts_on_card": ["집 전체 감시"], "sub_page_activity": "com.lumi.module.camera.CameraListActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.7, "app_text_count": 6, "app_texts": [{"text": "집 전체 감시", "type": "text", "class": "TextView"}, {"text": "총 2대의 카메라", "type": "text", "class": "TextView"}, {"text": "홈페이지에 \"전체 집 모니터링\" 카드 추가추가하기", "type": "text", "class": "TextView"}, {"text": "智能可视门铃G4（国际版）", "type": "text", "class": "TextView"}, {"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "이벤트 영상 기록 보기", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "집_전체_감시.png"}, {"path": "집 전체 사건의 영상", "depth": 1, "status": "captured", "all_texts_on_card": ["집 전체 사건의 영상"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 9.5, "app_text_count": 56, "app_texts": [{"text": "집 전체 사건의 영상", "type": "text", "class": "WebView"}, {"text": "집 전체 사건의 영상", "type": "text", "class": "TextView"}, {"text": "17", "type": "text", "class": "TextView"}, {"text": "18", "type": "text", "class": "TextView"}, {"text": "19", "type": "text", "class": "TextView"}, {"text": "20", "type": "text", "class": "TextView"}, {"text": "21", "type": "text", "class": "TextView"}, {"text": "22", "type": "text", "class": "TextView"}, {"text": "23", "type": "text", "class": "TextView"}, {"text": "카메라", "type": "text", "class": "TextView"}, {"text": "사람", "type": "text", "class": "TextView"}, {"text": "얼굴", "type": "text", "class": "TextView"}, {"text": "패키지", "type": "text", "class": "TextView"}, {"text": "차량", "type": "text", "class": "TextView"}, {"text": "고양이와 강아지", "type": "text", "class": "TextView"}, {"text": "홈 페이지에 \"전체 집 이벤트 비디오\" 카드 추가", "type": "text", "class": "TextView"}, {"text": "추가하기", "type": "text", "class": "TextView"}, {"text": "홈가드 서비스를 활성화하고 이벤트 영상을 90일간 보관하세요", "type": "text", "class": "TextView"}, {"text": "움직임명 인식됨", "type": "text", "class": "TextView"}, {"text": "오후 1:49:04 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:48:40 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:48:18 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:47:48 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:47:26 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:46:56 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:46:26 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:45:55 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:45:41 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:45:19 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:45:03 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:44:31 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:44:09 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:43:26 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:42:57 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:42:27 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:42:09 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:41:39 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:41:07 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:40:39 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:40:11 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:39:39 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:39:11 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:38:39 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:38:09 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:36:55 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:35:07 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:34:23 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:33:15 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:32:19 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:31:51 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:31:35 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:31:05 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:30:39 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:30:23 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:29:53 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "오후 1:29:35 | Default Room | 智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "집_전체_사건의_영상.png"}]}, {"label": "settings", "activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "page_texts": [{"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "장치 카드", "type": "text", "class": "TextView"}, {"text": "장치 설정", "type": "text", "class": "TextView"}, {"text": "장치 설정", "type": "text", "class": "TextView"}, {"text": "화면 설정", "type": "text", "class": "TextView"}, {"text": "도난 방지 모드", "type": "text", "class": "TextView"}, {"text": "이 기능을 활성화하면 카메라를 다른 Aqara 계정에 연결할 수 없습니다.", "type": "text", "class": "TextView"}, {"text": "감지 설정", "type": "text", "class": "TextView"}, {"text": "AI 감지", "type": "text", "class": "TextView"}, {"text": "알림", "type": "text", "class": "TextView"}, {"text": "비디오", "type": "text", "class": "TextView"}], "items": [{"path": "장치 카드", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 카드"], "sub_page_activity": "com.lumiunited.aqara.device.settingpage.view.homepagesetting.DeviceHomePageSettingAcitivty", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 7, "app_texts": [{"text": "장치 카드 수정", "type": "text", "class": "TextView"}, {"text": "摄像机", "type": "text", "class": "TextView"}, {"text": "아이콘 선택", "type": "text", "class": "TextView"}, {"text": "장치 위치", "type": "text", "class": "TextView"}, {"text": "Default Room", "type": "text", "class": "TextView"}, {"text": "장치 카드", "type": "text", "class": "TextView"}, {"text": "摄像机", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_카드.png"}, {"path": "장치 카드 > 摄像机", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["摄像机"]}, {"path": "장치 설정", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 설정"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.9, "app_text_count": 10, "app_texts": [{"text": "장치 설정", "type": "text", "class": "TextView"}, {"text": "주 설정", "type": "text", "class": "TextView"}, {"text": "경보 시스템 관련", "type": "text", "class": "TextView"}, {"text": "비밀번호 설정", "type": "text", "class": "TextView"}, {"text": "장치 삭제 방지", "type": "text", "class": "TextView"}, {"text": "장치 오프라인 알림", "type": "text", "class": "TextView"}, {"text": "자가 복구 모드", "type": "text", "class": "TextView"}, {"text": "Ark Mode 2.0을 켜면 메인 허브에 장애가 발생하면 에이전트 허브가 인계받아 부분적인 로컬 자동화 및 장면 실행을 보장할 수 있습니다.", "type": "text", "class": "TextView"}, {"text": "허브 교체", "type": "text", "class": "TextView"}, {"text": "현재 허브로 기존 허브를 \"교체\"합니다.", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정.png"}, {"path": "장치 설정 > 주 설정", "depth": 2, "status": "captured", "all_texts_on_card": ["주 설정"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.3, "app_text_count": 16, "app_texts": [{"text": "주 설정", "type": "text", "class": "TextView"}, {"text": "방해 금지 모드", "type": "text", "class": "TextView"}, {"text": "설정한 시간에 따라 지시등이 꺼집니다", "type": "text", "class": "TextView"}, {"text": "슬립 모드", "type": "text", "class": "TextView"}, {"text": "언어", "type": "text", "class": "TextView"}, {"text": "Italiano", "type": "text", "class": "TextView"}, {"text": "스피커 음량 설정", "type": "text", "class": "TextView"}, {"text": "2 %", "type": "text", "class": "TextView"}, {"text": "2.0", "type": "text", "class": "SeekBar"}, {"text": "타임랩스 비디오", "type": "text", "class": "TextView"}, {"text": "활성화", "type": "text", "class": "TextView"}, {"text": "SD 카드 저장", "type": "text", "class": "TextView"}, {"text": "맞춤 벨소리", "type": "text", "class": "TextView"}, {"text": "전원 주파수", "type": "text", "class": "TextView"}, {"text": "화면에 깜빡임 현상이 보일 경우 설정에 따라 이를 완화할 수 있습니다", "type": "text", "class": "TextView"}, {"text": "60Hz", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정.png"}, {"path": "장치 설정 > 주 설정 > 방해 금지 모드", "depth": 3, "status": "no_navigation", "all_texts_on_card": ["방해 금지 모드", "설정한 시간에 따라 지시등이 꺼집니다"]}, {"path": "장치 설정 > 주 설정 > 슬립 모드", "depth": 3, "status": "captured", "all_texts_on_card": ["슬립 모드"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.6, "app_text_count": 4, "app_texts": [{"text": "슬립 모드", "type": "text", "class": "TextView"}, {"text": "슬립 모드", "type": "text", "class": "TextView"}, {"text": "휴면시간", "type": "text", "class": "TextView"}, {"text": "매일 00:00-23:59", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_슬립_모드.png"}, {"path": "장치 설정 > 주 설정 > 슬립 모드 > 슬립 모드", "depth": 4, "status": "no_navigation", "all_texts_on_card": ["슬립 모드"]}, {"path": "장치 설정 > 주 설정 > 슬립 모드 > 휴면시간", "depth": 4, "status": "captured", "all_texts_on_card": ["휴면시간", "매일 00:00-23:59"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.6, "app_text_count": 8, "app_texts": [{"text": "휴면시간", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "시작 시간", "type": "text", "class": "TextView"}, {"text": "00:00", "type": "text", "class": "TextView"}, {"text": "종료 시간", "type": "text", "class": "TextView"}, {"text": "23:59", "type": "text", "class": "TextView"}, {"text": "반복 일정", "type": "text", "class": "TextView"}, {"text": "매일", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_슬립_모드_휴면시간.png"}, {"path": "장치 설정 > 주 설정 > 슬립 모드 > 휴면시간 > 시작 시간", "depth": 5, "status": "captured", "all_texts_on_card": ["시작 시간", "00:00"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.3, "app_text_count": 3, "app_texts": [{"text": "시작 시간", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_주_설정_슬립_모드_휴면시간_시작_시간.png"}, {"path": "장치 설정 > 주 설정 > 슬립 모드 > 휴면시간 > 종료 시간", "depth": 5, "status": "captured", "all_texts_on_card": ["종료 시간", "23:59"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 3, "app_texts": [{"text": "종료 시간", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_주_설정_슬립_모드_휴면시간_종료_시간.png"}, {"path": "장치 설정 > 주 설정 > 슬립 모드 > 휴면시간 > 반복 일정", "depth": 5, "status": "captured", "all_texts_on_card": ["반복 일정", "매일"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.1, "app_text_count": 9, "app_texts": [{"text": "반복 일정", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}, {"text": "일요일", "type": "text", "class": "TextView"}, {"text": "월요일", "type": "text", "class": "TextView"}, {"text": "화요일", "type": "text", "class": "TextView"}, {"text": "수요일", "type": "text", "class": "TextView"}, {"text": "목요일", "type": "text", "class": "TextView"}, {"text": "금요일", "type": "text", "class": "TextView"}, {"text": "토요일", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_슬립_모드_휴면시간_반복_일정.png"}, {"path": "장치 설정 > 주 설정 > 언어", "depth": 3, "status": "captured", "all_texts_on_card": ["언어", "Italiano"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.1, "app_text_count": 9, "app_texts": [{"text": "언어", "type": "text", "class": "TextView"}, {"text": "中文", "type": "text", "class": "TextView"}, {"text": "English", "type": "text", "class": "TextView"}, {"text": "Español", "type": "text", "class": "TextView"}, {"text": "Русский", "type": "text", "class": "TextView"}, {"text": "한국어", "type": "text", "class": "TextView"}, {"text": "Deutsch", "type": "text", "class": "TextView"}, {"text": "Français", "type": "text", "class": "TextView"}, {"text": "Italiano", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_언어.png"}, {"path": "장치 설정 > 주 설정 > 타임랩스 비디오", "depth": 3, "status": "captured", "all_texts_on_card": ["타임랩스 비디오", "활성화"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.7, "app_text_count": 10, "app_texts": [{"text": "타임랩스 비디오", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "타임랩스 비디오", "type": "text", "class": "TextView"}, {"text": "시작 시간", "type": "text", "class": "TextView"}, {"text": "00:00", "type": "text", "class": "TextView"}, {"text": "종료 시간", "type": "text", "class": "TextView"}, {"text": "23:59", "type": "text", "class": "TextView"}, {"text": "반복 일정", "type": "text", "class": "TextView"}, {"text": "매일", "type": "text", "class": "TextView"}, {"text": "타임랩스는 촬영한 동영상을 짧고 느리게 변화하는 비디오로 압축하여 '앨범-타임랩스'에 저장할 수 있습니다.", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_타임랩스_비디오.png"}, {"path": "장치 설정 > 주 설정 > 타임랩스 비디오 > 타임랩스 비디오", "depth": 4, "status": "no_navigation", "all_texts_on_card": ["타임랩스 비디오"]}, {"path": "장치 설정 > 주 설정 > 타임랩스 비디오 > 시작 시간", "depth": 4, "status": "captured", "all_texts_on_card": ["시작 시간", "00:00"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 3, "app_texts": [{"text": "시작 시간", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_주_설정_타임랩스_비디오_시작_시간.png"}, {"path": "장치 설정 > 주 설정 > 타임랩스 비디오 > 종료 시간", "depth": 4, "status": "captured", "all_texts_on_card": ["종료 시간", "23:59"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 3, "app_texts": [{"text": "종료 시간", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_주_설정_타임랩스_비디오_종료_시간.png"}, {"path": "장치 설정 > 주 설정 > 타임랩스 비디오 > 반복 일정", "depth": 4, "status": "captured", "all_texts_on_card": ["반복 일정", "매일"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.9, "app_text_count": 9, "app_texts": [{"text": "반복 일정", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}, {"text": "일요일", "type": "text", "class": "TextView"}, {"text": "월요일", "type": "text", "class": "TextView"}, {"text": "화요일", "type": "text", "class": "TextView"}, {"text": "수요일", "type": "text", "class": "TextView"}, {"text": "목요일", "type": "text", "class": "TextView"}, {"text": "금요일", "type": "text", "class": "TextView"}, {"text": "토요일", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_타임랩스_비디오_반복_일정.png"}, {"path": "장치 설정 > 주 설정 > SD 카드 저장", "depth": 3, "status": "captured", "all_texts_on_card": ["SD 카드 저장"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.3, "app_text_count": 14, "app_texts": [{"text": "SD 카드 저장", "type": "text", "class": "TextView"}, {"text": "SD 카드 상태", "type": "text", "class": "TextView"}, {"text": "정상", "type": "text", "class": "TextView"}, {"text": "저장 공간", "type": "text", "class": "TextView"}, {"text": "합계 29.70 GB", "type": "text", "class": "TextView"}, {"text": "사용 중：29.54 GB", "type": "text", "class": "TextView"}, {"text": "기타：0.00 MB", "type": "text", "class": "TextView"}, {"text": "사용 가능：167.00 MB", "type": "text", "class": "TextView"}, {"text": "녹화 모드", "type": "text", "class": "TextView"}, {"text": "움직임/소리 감지 시 녹화", "type": "text", "class": "TextView"}, {"text": "루프 녹화", "type": "text", "class": "TextView"}, {"text": "저장공간이 가득 찰 경우, 가장 이전 영상에 덮어쓰기 합니다", "type": "text", "class": "TextView"}, {"text": "NAS네트워크 스토리지", "type": "text", "class": "TextView"}, {"text": "외장메모리카드 초기화", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_SD_카드_저장.png"}, {"path": "장치 설정 > 주 설정 > SD 카드 저장 > SD 카드 상태", "depth": 4, "status": "no_navigation", "all_texts_on_card": ["SD 카드 상태", "정상"]}, {"path": "장치 설정 > 주 설정 > SD 카드 저장 > 녹화 모드", "depth": 4, "status": "captured", "all_texts_on_card": ["녹화 모드", "움직임/소리 감지 시 녹화"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 3, "app_texts": [{"text": "녹화 모드", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_주_설정_SD_카드_저장_녹화_모드.png"}, {"path": "장치 설정 > 주 설정 > SD 카드 저장 > 루프 녹화", "depth": 4, "status": "no_navigation", "all_texts_on_card": ["루프 녹화", "저장공간이 가득 찰 경우, 가장 이전 영상에 덮어쓰기 합니다"]}, {"path": "장치 설정 > 주 설정 > SD 카드 저장 > NAS네트워크 스토리지", "depth": 4, "status": "captured", "all_texts_on_card": ["NAS네트워크 스토리지"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 3, "app_texts": [{"text": "NAS 스토리지", "type": "text", "class": "TextView"}, {"text": "MicroSD 카드의 영상을 NAS에 저장할 수 있습니다.", "type": "text", "class": "TextView"}, {"text": "WIN-NM463EFD28V", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_SD_카드_저장_NAS네트워크_스토리지.png"}, {"path": "장치 설정 > 주 설정 > SD 카드 저장 > NAS네트워크 스토리지 > WIN-NM463EFD28V", "depth": 5, "status": "captured", "all_texts_on_card": ["WIN-NM463EFD28V"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 6, "app_texts": [{"text": "권한 인증", "type": "text", "class": "TextView"}, {"text": "권한 인증이 필요없는 경우 '확인'을 누르세요.", "type": "text", "class": "TextView"}, {"text": "사용자 이름을 입력해주세요.", "type": "text", "class": "EditText"}, {"text": "비밀번호를 입력해주세요.", "type": "text", "class": "EditText"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_주_설정_SD_카드_저장_NAS네트워크_스토리지_WIN-NM463EFD28V.png"}, {"path": "장치 설정 > 주 설정 > 맞춤 벨소리", "depth": 3, "status": "captured", "all_texts_on_card": ["맞춤 벨소리"], "sub_page_activity": "com.lumiunited.aqara.device.devicepage.customring.CustomRingActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 6, "app_texts": [{"text": "맞춤 벨소리", "type": "text", "class": "TextView"}, {"text": "벨소리 \n라이브러리", "type": "text", "class": "TextView"}, {"text": "사용자 지정 벨소리 파일은 MP3 형식만 지원하며, 개별 파일의 최대 크기 2MB, 벨소리 라이브러리에서 장치로 다운로드할 수 있는 최대 벨소리 수량은 5개입니다.", "type": "text", "class": "TextView"}, {"text": "현재 구성에 사용자 정의 벨소리가 없습니다", "type": "text", "class": "TextView"}, {"text": "아래 버튼을 클릭하여\n1. 새 mp3 파일을 기기로 가져오기\n2. \"벨소리 라이브러리\"에서 벨소리를 선택하여 기기로 가져오기\n3. 새 녹음을 기기에 추가하기", "type": "text", "class": "TextView"}, {"text": "벨소리 추가", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_주_설정_맞춤_벨소리.png"}, {"path": "장치 설정 > 주 설정 > 전원 주파수", "depth": 3, "status": "captured", "all_texts_on_card": ["전원 주파수", "화면에 깜빡임 현상이 보일 경우 설정에 따라 이를 완화할 수 있습니다", "60Hz"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 3, "app_texts": [{"text": "전원 주파수", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_주_설정_전원_주파수.png"}, {"path": "장치 설정 > 경보 시스템 관련", "depth": 2, "status": "captured", "all_texts_on_card": ["경보 시스템 관련"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 4, "app_texts": [{"text": "경보 시스템 관련", "type": "text", "class": "TextView"}, {"text": "서비스를 사용할 수 없습니다. 이 기능을 사용할 수 없습니다. 사용하려면 서비스를 활성화하세요. 지금 활성화>", "type": "text", "class": "TextView"}, {"text": "경보 시스템 관련", "type": "text", "class": "TextView"}, {"text": "해당 카메라가 \"보안 카메라\"로 작동하며, 보안 경보가 발생하면 자동으로 영상을 녹화합니다.", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_경보_시스템_관련.png"}, {"path": "장치 설정 > 경보 시스템 관련 > 결제", "depth": 3, "status": "captured", "all_texts_on_card": ["결제"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 6.0, "app_text_count": 28, "app_texts": [{"text": "홈가디언", "type": "text", "class": "WebView"}, {"text": "홈가디언", "type": "text", "class": "TextView"}, {"text": "주문", "type": "text", "class": "Button"}, {"text": "무제한 카메라", "type": "text", "class": "TextView"}, {"text": "단일 카메라", "type": "text", "class": "TextView"}, {"text": "홈가디언 언리미티드", "type": "text", "class": "TextView"}, {"text": "•", "type": "text", "class": "View"}, {"text": "집 안의 모든 카메라를 지원", "type": "text", "class": "TextView"}, {"text": "90일의 비디오 이벤트 기록", "type": "text", "class": "TextView"}, {"text": "사람 형태, 얼굴, 동물, 차량, 소포, 화재 인식", "type": "text", "class": "TextView"}, {"text": "프리미엄 AI 이벤트 감지", "type": "text", "class": "TextView"}, {"text": "AI 비디오 요약, AI 비디오 검색", "type": "text", "class": "TextView"}, {"text": "가족을 선택하세요", "type": "text", "class": "View"}, {"text": "default position1", "type": "text", "class": "TextView"}, {"text": "서비스 유형 선택", "type": "text", "class": "TextView"}, {"text": "매년", "type": "text", "class": "TextView"}, {"text": "$99.99", "type": "text", "class": "TextView"}, {"text": "$179.88", "type": "text", "class": "TextView"}, {"text": "연간 $99.99로 자동 갱신", "type": "text", "class": "TextView"}, {"text": "44% OFF", "type": "text", "class": "TextView"}, {"text": "$9.99", "type": "text", "class": "TextView"}, {"text": "$14.99", "type": "text", "class": "TextView"}, {"text": "월 $9.99로 자동 갱신", "type": "text", "class": "TextView"}, {"text": "33% OFF", "type": "text", "class": "TextView"}, {"text": "지금 결제", "type": "text", "class": "TextView"}, {"text": "홈 가디언 서비스 계약", "type": "text", "class": "TextView"}, {"text": "자동 갱신 계약", "type": "text", "class": "TextView"}, {"text": "을 읽고 동의했습니다.", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "장치_설정_경보_시스템_관련_결제.png"}, {"path": "장치 설정 > 비밀번호 설정", "depth": 2, "status": "captured", "all_texts_on_card": ["비밀번호 설정"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 3, "app_texts": [{"text": "안전 설정", "type": "text", "class": "TextView"}, {"text": "비밀번호 설정", "type": "text", "class": "TextView"}, {"text": "비밀번호 변경", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_설정_비밀번호_설정.png"}, {"path": "장치 설정 > 장치 삭제 방지", "depth": 2, "status": "skipped_danger", "reason": "keyword '삭제' in '장치 삭제 방지'", "all_texts_on_card": ["장치 삭제 방지"]}, {"path": "장치 설정 > 장치 오프라인 알림", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["장치 오프라인 알림"]}, {"path": "장치 설정 > 자가 복구 모드", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["자가 복구 모드", "Ark Mode 2.0을 켜면 메인 허브에 장애가 발생하면 에이전트 허브가 인계받아 부분적인 로컬 자동화 및 장면 실행을 보장할 수 있습니다."]}, {"path": "장치 설정 > 허브 교체", "depth": 2, "status": "skipped_danger", "reason": "keyword '교체' in '허브 교체'", "all_texts_on_card": ["허브 교체", "현재 허브로 기존 허브를 \"교체\"합니다."]}, {"path": "화면 설정", "depth": 1, "status": "captured", "all_texts_on_card": ["화면 설정"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.9, "app_text_count": 11, "app_texts": [{"text": "화면 설정", "type": "text", "class": "TextView"}, {"text": "화면 내 시간 표기", "type": "text", "class": "TextView"}, {"text": "로고 워터마크", "type": "text", "class": "TextView"}, {"text": "활성화 후, 다운로드 및 공유된 동영상에 브랜드 로고 워터마크 정보가 표시됩니다", "type": "text", "class": "TextView"}, {"text": "화면 반전", "type": "text", "class": "TextView"}, {"text": "정상", "type": "text", "class": "TextView"}, {"text": "야간 적외선 모드", "type": "text", "class": "TextView"}, {"text": "자동", "type": "text", "class": "TextView"}, {"text": "프라이버시 마스킹", "type": "text", "class": "TextView"}, {"text": "오디오 녹음 비활성화", "type": "text", "class": "TextView"}, {"text": "클라우드 및 메모리 카드에 영상을 녹화할 때 오디오를 제거합니다", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "화면_설정.png"}, {"path": "화면 설정 > 화면 내 시간 표기", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["화면 내 시간 표기"]}, {"path": "화면 설정 > 로고 워터마크", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["로고 워터마크", "활성화 후, 다운로드 및 공유된 동영상에 브랜드 로고 워터마크 정보가 표시됩니다"]}, {"path": "화면 설정 > 화면 반전", "depth": 2, "status": "captured", "all_texts_on_card": ["화면 반전", "정상"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 2, "app_texts": [{"text": "이미지 회전", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "확인", "_screenshot": "화면_설정_화면_반전.png"}, {"path": "화면 설정 > 야간 적외선 모드", "depth": 2, "status": "captured", "all_texts_on_card": ["야간 적외선 모드", "자동"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 3, "app_texts": [{"text": "야간 적외선 모드", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "화면_설정_야간_적외선_모드.png"}, {"path": "화면 설정 > 프라이버시 마스킹", "depth": 2, "status": "captured", "all_texts_on_card": ["프라이버시 마스킹"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.6, "app_text_count": 4, "app_texts": [{"text": "프라이버시 마스킹", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "마스킹 존（0/3）", "type": "text", "class": "TextView"}, {"text": "작업 설명:\n• 격자를 눌러 개인보호구역을 선택하세요.\n• 선택한 영역을 클릭하면 선택이 취소됩니다. 실시간 영상 페이지로 돌아가서 정상적으로 설정되었는지 확인하세요.\n• 설정된 영역은 영상 화면을 볼 수 없으며 이벤트가 트리거되지 않습니다 (전체 모션 감지에는 영향을 미치지 않습니다).", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "화면_설정_프라이버시_마스킹.png"}, {"path": "화면 설정 > 프라이버시 마스킹 > 프라이버시 마스킹", "depth": 3, "status": "no_navigation", "all_texts_on_card": ["프라이버시 마스킹"]}, {"path": "화면 설정 > 오디오 녹음 비활성화", "depth": 2, "status": "skipped_danger", "reason": "keyword '제거' in '클라우드 및 메모리 카드에 영상을 녹화할 때 오디오를 제거합니다'", "all_texts_on_card": ["오디오 녹음 비활성화", "클라우드 및 메모리 카드에 영상을 녹화할 때 오디오를 제거합니다"]}, {"path": "도난 방지 모드", "depth": 1, "status": "no_navigation", "all_texts_on_card": ["도난 방지 모드", "이 기능을 활성화하면 카메라를 다른 Aqara 계정에 연결할 수 없습니다."]}, {"path": "AI 감지", "depth": 1, "status": "captured", "all_texts_on_card": ["AI 감지"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.9, "app_text_count": 10, "app_texts": [{"text": "AI 감지", "type": "text", "class": "WebView"}, {"text": "AI 감지", "type": "text", "class": "TextView"}, {"text": "AI 기능의 감지 결과가 정확하지 않을 수 있으며, 보조 도움이나 참고용으로만 제공됩니다", "type": "text", "class": "TextView"}, {"text": "AI 비디오 검색 Lab 비디오와 타임라인을 검색하기 위해 \"키워드 입력\"과 \"프리미엄 AI 이벤트 필터링\"을 사용할 수 있습니다 끄기", "type": "text", "class": "Button"}, {"text": "AI 비디오 요약 Lab 비디오에서 무슨 일이 일어났는지 한 문장으로 명확하게 설명하세요 끄기", "type": "text", "class": "Button"}, {"text": "움직임 감지 켜져 있음", "type": "text", "class": "Button"}, {"text": "큰 소리 감지 끄기", "type": "text", "class": "Button"}, {"text": "인물 감지 켜져 있음", "type": "text", "class": "Button"}, {"text": "얼굴 감지 끄기", "type": "text", "class": "Button"}, {"text": "동물 감지 Lab 켜져 있음", "type": "text", "class": "Button"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "AI_감지.png"}, {"path": "AI 감지 > AI 비디오 요약 Lab 비디오에서 무슨 일이 일어났는지 한 문장으로 명확하게 설명하세요 끄기", "depth": 2, "status": "skipped_danger", "reason": "keyword '끄기' in 'AI 비디오 요약 Lab 비디오에서 무슨 일이 일어났는지 한 문장으로 명확하게 설명하세요 끄기'", "all_texts_on_card": ["AI 비디오 요약 Lab 비디오에서 무슨 일이 일어났는지 한 문장으로 명확하게 설명하세요 끄기"]}, {"path": "AI 감지 > 움직임 감지 켜져 있음", "depth": 2, "status": "captured", "all_texts_on_card": ["움직임 감지 켜져 있음"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.7, "app_text_count": 19, "app_texts": [{"text": "AI 감지", "type": "text", "class": "WebView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}, {"text": "화면에 눈에 띄는 변화가 나타나면 카메라가 자동으로 녹화하고 알림을 보냅니다.", "type": "text", "class": "TextView"}, {"text": "이미지가 안정적이고 조명이 좋으며 배경 변화가 적을 때 감지 효과가 가장 좋습니다.", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "Button"}, {"text": "알림", "type": "text", "class": "TextView"}, {"text": "이벤트가 감지되면 휴대폰에 알림이 표시됩니다", "type": "text", "class": "TextView"}, {"text": "알림", "type": "text", "class": "Button"}, {"text": "클라우드 동영상", "type": "text", "class": "TextView"}, {"text": "이벤트가 감지되면 비디오가 자동으로 클라우드에 업로드됩니다.", "type": "text", "class": "TextView"}, {"text": "클라우드 동영상", "type": "text", "class": "Button"}, {"text": "움직임 감지 수준", "type": "text", "class": "TextView"}, {"text": "감도가 높을수록 더욱 미묘한 사건을 감지할 수 있으며 경보를 발생시키기가 더 쉽습니다.", "type": "text", "class": "TextView"}, {"text": "중간", "type": "text", "class": "TextView"}, {"text": "감지 구역", "type": "text", "class": "TextView"}, {"text": "감지 시간", "type": "text", "class": "TextView"}, {"text": "매일 00:00~23:59", "type": "text", "class": "TextView"}, {"text": "감지 시간 간격", "type": "text", "class": "TextView"}, {"text": "15 초", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "AI_감지_움직임_감지_켜져_있음.png"}, {"path": "AI 감지 > 큰 소리 감지 끄기", "depth": 2, "status": "skipped_danger", "reason": "keyword '끄기' in '큰 소리 감지 끄기'", "all_texts_on_card": ["큰 소리 감지 끄기"]}, {"path": "AI 감지 > 인물 감지 켜져 있음", "depth": 2, "status": "captured", "all_texts_on_card": ["인물 감지 켜져 있음"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.8, "app_text_count": 14, "app_texts": [{"text": "AI 감지", "type": "text", "class": "WebView"}, {"text": "인물 감지", "type": "text", "class": "TextView"}, {"text": "사람의 활동을 모니터링하기에 적합합니다. 시야에 사람의 형태가 나타나면, 카메라가 자동으로 기록하고 알려드립니다.", "type": "text", "class": "TextView"}, {"text": "사람의 형태가 프레임에 완전히 들어오고 조명이 좋을 때 감지 효과가 더 좋습니다.", "type": "text", "class": "TextView"}, {"text": "\"홈가디언\" 서비스에 가입하여 더 많은 프리미엄 AI 기능을 이용하세요.", "type": "text", "class": "TextView"}, {"text": "구독", "type": "text", "class": "TextView"}, {"text": "인물 감지", "type": "text", "class": "Button"}, {"text": "알림", "type": "text", "class": "TextView"}, {"text": "이벤트가 감지되면 휴대폰에 알림이 표시됩니다", "type": "text", "class": "TextView"}, {"text": "알림", "type": "text", "class": "Button"}, {"text": "클라우드 동영상", "type": "text", "class": "TextView"}, {"text": "이벤트가 감지되면 비디오가 자동으로 클라우드에 업로드됩니다.", "type": "text", "class": "TextView"}, {"text": "클라우드 동영상", "type": "text", "class": "Button"}, {"text": "홈 가디언 제공", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "AI_감지_인물_감지_켜져_있음.png"}, {"path": "AI 감지 > 얼굴 감지 끄기", "depth": 2, "status": "skipped_danger", "reason": "keyword '끄기' in '얼굴 감지 끄기'", "all_texts_on_card": ["얼굴 감지 끄기"]}, {"path": "AI 감지 > 동물 감지 Lab 켜져 있음", "depth": 2, "status": "captured", "all_texts_on_card": ["동물 감지 Lab 켜져 있음"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.7, "app_text_count": 14, "app_texts": [{"text": "AI 감지", "type": "text", "class": "WebView"}, {"text": "동물 감지", "type": "text", "class": "TextView"}, {"text": "반려동물이 있는 가정에 적합합니다. 시야에 반려동물이 나타나면, 카메라가 자동으로 기록하고 알려드립니다.", "type": "text", "class": "TextView"}, {"text": "반려동물이 프레임에 완전히 들어오고 조명이 좋을 때 감지 효과가 더 좋습니다.", "type": "text", "class": "TextView"}, {"text": "\"홈가디언\" 서비스에 가입하여 더 많은 프리미엄 AI 기능을 이용하세요.", "type": "text", "class": "TextView"}, {"text": "구독", "type": "text", "class": "TextView"}, {"text": "동물 감지", "type": "text", "class": "Button"}, {"text": "알림", "type": "text", "class": "TextView"}, {"text": "이벤트가 감지되면 휴대폰에 알림이 표시됩니다", "type": "text", "class": "TextView"}, {"text": "알림", "type": "text", "class": "Button"}, {"text": "클라우드 동영상", "type": "text", "class": "TextView"}, {"text": "이벤트가 감지되면 비디오가 자동으로 클라우드에 업로드됩니다.", "type": "text", "class": "TextView"}, {"text": "클라우드 동영상", "type": "text", "class": "Button"}, {"text": "홈 가디언 제공", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "AI_감지_동물_감지_Lab_켜져_있음.png"}, {"path": "AI 감지 > 차량 감지 Lab 끄기", "depth": 2, "status": "skipped_danger", "reason": "keyword '끄기' in '차량 감지 Lab 끄기'", "all_texts_on_card": ["차량 감지 Lab 끄기"]}, {"path": "AI 감지 > 패키지 감지 Lab 끄기", "depth": 2, "status": "skipped_danger", "reason": "keyword '끄기' in '패키지 감지 Lab 끄기'", "all_texts_on_card": ["패키지 감지 Lab 끄기"]}, {"path": "AI 감지 > 화재 감지 Lab 끄기", "depth": 2, "status": "skipped_danger", "reason": "keyword '끄기' in '화재 감지 Lab 끄기'", "all_texts_on_card": ["화재 감지 Lab 끄기"]}, {"path": "AI 감지 > AI 비디오 검색 Lab 비디오와 타임라인을 검색하기 위해 \"키워드 입력\"과 \"프리미엄 AI 이벤트 필터링\"을 사용할 수 있습니다 끄기", "depth": 2, "status": "vanished"}, {"path": "알림", "depth": 1, "status": "captured", "all_texts_on_card": ["알림"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 5.1, "app_text_count": 22, "app_texts": [{"text": "알림", "type": "text", "class": "WebView"}, {"text": "알림", "type": "text", "class": "TextView"}, {"text": "트리거 이벤트 후, 휴대폰으로 알림 메시지를 받게 됩니다", "type": "text", "class": "TextView"}, {"text": "알림 설정", "type": "text", "class": "TextView"}, {"text": "알림 유형", "type": "text", "class": "TextView"}, {"text": "이벤트 알림", "type": "text", "class": "TextView"}, {"text": "알림 환경설정", "type": "text", "class": "TextView"}, {"text": "이벤트 설정", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "Button"}, {"text": "큰 소리 감지", "type": "text", "class": "TextView"}, {"text": "큰 소리 감지", "type": "text", "class": "Button"}, {"text": "\"홈가디언\" 서비스에 가입하여 더 많은 프리미엄 AI 기능을 이용하세요.", "type": "text", "class": "TextView"}, {"text": "구독", "type": "text", "class": "TextView"}, {"text": "프리미엄 AI 이벤트", "type": "text", "class": "TextView"}, {"text": "카메라에는 더 많은 강력한 기능이 있습니다", "type": "text", "class": "TextView"}, {"text": "인물 감지", "type": "text", "class": "TextView"}, {"text": "얼굴 감지", "type": "text", "class": "TextView"}, {"text": "동물 감지", "type": "text", "class": "TextView"}, {"text": "차량 감지", "type": "text", "class": "TextView"}, {"text": "패키지 감지", "type": "text", "class": "TextView"}, {"text": "화재 감지", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "알림.png"}, {"path": "비디오", "depth": 1, "status": "captured", "all_texts_on_card": ["비디오"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.9, "app_text_count": 14, "app_texts": [{"text": "클라우드 동영상", "type": "text", "class": "WebView"}, {"text": "클라우드 동영상", "type": "text", "class": "TextView"}, {"text": "이벤트가 감지되면 비디오가 자동으로 클라우드에 업로드됩니다.", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}, {"text": "开关", "type": "text", "class": "ToggleButton"}, {"text": "큰 소리 감지", "type": "text", "class": "TextView"}, {"text": "인물 감지", "type": "text", "class": "TextView"}, {"text": "얼굴 감지", "type": "text", "class": "TextView"}, {"text": "동물 감지", "type": "text", "class": "TextView"}, {"text": "차량 감지", "type": "text", "class": "TextView"}, {"text": "패키지 감지", "type": "text", "class": "TextView"}, {"text": "화재 감지", "type": "text", "class": "TextView"}, {"text": "\"홈가디언\" 서비스에 가입하여 더 많은 프리미엄 AI 기능을 이용하세요.", "type": "text", "class": "TextView"}, {"text": "구독", "type": "text", "class": "Button"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "비디오.png"}, {"path": "HomeGuardian 클라우드 녹화", "depth": 1, "status": "captured", "all_texts_on_card": ["HomeGuardian 클라우드 녹화", "만료됨"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 6.6, "app_text_count": 86, "app_texts": [{"text": "홈가디언", "type": "text", "class": "TextView"}, {"text": "NEW", "type": "text", "class": "TextView"}, {"text": "더 세심하게 가정을 케어하세요.", "type": "text", "class": "TextView"}, {"text": "default position1", "type": "text", "class": "TextView"}, {"text": "활성화되지 않음", "type": "text", "class": "TextView"}, {"text": "홈 가디언을 활성화하여 고급 기능을 사용해보세요.", "type": "text", "class": "TextView"}, {"text": "다음 장치가 활성화되어 있습니다.", "type": "text", "class": "TextView"}, {"text": "서비스 혜택", "type": "text", "class": "TextView"}, {"text": "더보기", "type": "text", "class": "Button"}, {"text": "비디오 및 이력 이벤트 90일 저장", "type": "text", "class": "TextView"}, {"text": "고급 AI 필터링(플러스 전용)", "type": "text", "class": "TextView"}, {"text": "얼굴 감지(플러스 전용)", "type": "text", "class": "TextView"}, {"text": "AI 비디오 요약(플러스 전용)", "type": "text", "class": "TextView"}, {"text": "결제", "type": "text", "class": "Button"}, {"text": "AI 비디오 검색(플러스 전용)", "type": "text", "class": "TextView"}, {"text": "AI 텍스트를 음성으로 변환(플러스 전용)", "type": "text", "class": "TextView"}, {"text": "연결된 센서", "type": "text", "class": "TextView"}, {"text": "리치 알림", "type": "text", "class": "TextView"}, {"text": "10분 타이머 스냅샷", "type": "text", "class": "TextView"}, {"text": "서비스 비교", "type": "text", "class": "View"}, {"text": "서비스 비교", "type": "text", "class": "TextView"}, {"text": "로컬 스토리지", "type": "text", "class": "TextView"}, {"text": "비디오 및 이벤트", "type": "text", "class": "TextView"}, {"text": "이벤트 비디오 저장", "type": "text", "class": "TextView"}, {"text": "90일", "type": "text", "class": "TextView"}, {"text": "용량 제한", "type": "text", "class": "TextView"}, {"text": "14", "type": "text", "class": "TextView"}, {"text": "AI 비디오", "type": "text", "class": "TextView"}, {"text": "인물 감지", "type": "text", "class": "TextView"}, {"text": "선택 모델에서 지원됨", "type": "text", "class": "TextView"}, {"text": "얼굴 감지", "type": "text", "class": "TextView"}, {"text": "플러스 전용", "type": "text", "class": "TextView"}, {"text": "패키지 감지", "type": "text", "class": "TextView"}, {"text": "차량 감지", "type": "text", "class": "TextView"}, {"text": "고급 AI 필터링(LAB)", "type": "text", "class": "TextView"}, {"text": "AI 비디오 요약(LAB)", "type": "text", "class": "TextView"}, {"text": "AI 비디오 검색(LAB)", "type": "text", "class": "TextView"}, {"text": "AI 요약 알림", "type": "text", "class": "TextView"}, {"text": "AI 텍스트를 음성으로 변환", "type": "text", "class": "TextView"}, {"text": "AI 맞춤 감지", "type": "text", "class": "TextView"}, {"text": "곧 출시", "type": "text", "class": "TextView"}, {"text": "화재 감지", "type": "text", "class": "TextView"}, {"text": "10", "type": "text", "class": "TextView"}, {"text": "동물 감지", "type": "text", "class": "TextView"}, {"text": "11", "type": "text", "class": "TextView"}, {"text": "리치 미디어 알림", "type": "text", "class": "TextView"}, {"text": "15", "type": "text", "class": "TextView"}, {"text": "GIF 알림 및 비디오 썸네일", "type": "text", "class": "TextView"}, {"text": "재실/부재 스마트 모드", "type": "text", "class": "TextView"}, {"text": "12", "type": "text", "class": "TextView"}, {"text": "기본 보호\n보안 카메라\n긴급 도움", "type": "text", "class": "TextView"}, {"text": "기본 보호", "type": "text", "class": "TextView"}, {"text": "경고 알림", "type": "text", "class": "TextView"}, {"text": "이메일 및 SMS", "type": "text", "class": "TextView"}, {"text": "홈 가디언 사용 보고서", "type": "text", "class": "TextView"}, {"text": "더보기", "type": "text", "class": "TextView"}, {"text": "저장 공간", "type": "text", "class": "TextView"}, {"text": "제한 없음", "type": "text", "class": "TextView"}, {"text": "오프라인 리뷰", "type": "text", "class": "TextView"}, {"text": "기기가 손상/도난되어도 재생 가능", "type": "text", "class": "TextView"}, {"text": "손상/비정상 SD 카드로도 재생 가능", "type": "text", "class": "TextView"}, {"text": "저장 매체 수명", "type": "text", "class": "TextView"}, {"text": "손상 없음", "type": "text", "class": "TextView"}, {"text": "다중 읽기/쓰기 작업은 손상을 일으킬 수 있습니다", "type": "text", "class": "TextView"}, {"text": "앱 비디오 다운로드", "type": "text", "class": "TextView"}, {"text": "데이터 보안", "type": "text", "class": "TextView"}, {"text": "클라우드 스토리지는 장치 손상에 영향 받지 않습니다", "type": "text", "class": "TextView"}, {"text": "장치 손상을 되돌릴 수 없습니다", "type": "text", "class": "TextView"}, {"text": "데이터 개인정보 보호", "type": "text", "class": "TextView"}, {"text": "암호화된 클라우드 저장소", "type": "text", "class": "TextView"}, {"text": "분실 및 쉽게 읽을 수 있음", "type": "text", "class": "TextView"}, {"text": "1. 클라우드의 비디오는 최대 90일 동안 저장됩니다. 서비스 업그레이드 후에는 이후에 녹화된 비디오의 저장 시간만 조정됩니다. 홈 가디언은 이벤트 클립을 클라우드에 저장하며(클라우드 스토리지: 미리 구성된 AI 이벤트에 의해 트리거된 녹화 클립), 로컬 스토리지는 연속 녹화 및 시간 세그먼트를 저장할 수 있습니다(연속 녹화: 24/7 중단 없는 녹화).", "type": "text", "class": "View"}, {"text": "2. 연기, 가스, 누수, 무선 스위치 및 기타 센서를 설치해야 하며, 위 제품에 국한되지 않습니다. 모든 Aqara 스마트 제품의 자동화 조건을 구성할 수 있습니다. 이벤트가 트리거되면 카메라가 연동되어 영상을 녹화하여 이벤트 과정을 기록합니다. 이 기능은 특정 카메라 및 초인종에 적용됩니다. 여기에서 자세히 알아보세요.", "type": "text", "class": "View"}, {"text": "2. 연기, 가스, 누수, 무선 스위치 및 기타 센서를 설치해야 하며, 위 제품에 국한되지 않습니다. 모든 Aqara 스마트 제품의 자동화 조건을 구성할 수 있습니다. 이벤트가 트리거되면 카메라가 연동되어 영상을 녹화하여 이벤트 과정을 기록합니다. 이 기능은 특정 카메라 및 초인종에 적용됩니다.", "type": "text", "class": "TextView"}, {"text": "여기", "type": "text", "class": "TextView"}, {"text": "에서 자세히 알아보세요.", "type": "text", "class": "TextView"}, {"text": "3.5.6.11. 특정 모델에서 지원됨: Aqara 공식 웹사이트 aqara.com을 방문하여 어떤 카메라 또는 초인종 모델이 이를 지원하는지 확인하세요. Home Guardian을 구독한 후, 이 기능은 특정 카메라 및 초인종에 적용됩니다. 여기에서 자세히 알아보세요.", "type": "text", "class": "View"}, {"text": "3.5.6.11. 특정 모델에서 지원됨: Aqara 공식 웹사이트 aqara.com을 방문하여 어떤 카메라 또는 초인종 모델이 이를 지원하는지 확인하세요. Home Guardian을 구독한 후, 이 기능은 특정 카메라 및 초인종에 적용됩니다.", "type": "text", "class": "TextView"}, {"text": "4. 특정 모델에서 지원됨: Aqara 웹사이트 aqara.com에서 어떤 카메라 또는 초인종 모델이 이 기능을 지원하는지 확인하세요. 카메라의 로컬 알고리즘이 지원되지 않는 경우, HomeGuardian Plus(무제한 카메라) 서비스를 구독해야 합니다.", "type": "text", "class": "View"}, {"text": "7.8.9. 이것들은 홈 가디언 플러스(가족 플랜) 서비스 구독이 필요한 실험실 기능입니다.", "type": "text", "class": "View"}, {"text": "10. Aqara의 비디오 기반 화재 감지 기능은 보조 도구이며 연기 감지기, 전통적인 경보 시스템 또는 적절한 안전 조치와 같은 표준 화재 감지 시스템을 대체해서는 안 됩니다.", "type": "text", "class": "View"}, {"text": "12. Aqara 보안 키트와 홈 가디언 서비스가 필요하며, 두 가지 모두 별도 판매됩니다.", "type": "text", "class": "View"}, {"text": "13. 특정 국가에 적용됩니다. 여기에서 자세히 알아보세요.", "type": "text", "class": "View"}, {"text": "14.15. 이 기능은 특정 카메라 및 초인종에 적용됩니다. 여기에서 자세히 알아보세요.", "type": "text", "class": "View"}, {"text": "자세히 알아보기", "type": "text", "class": "TextView"}, {"text": "서비스 설명", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "HomeGuardian_클라우드_녹화.png"}, {"path": "HomeGuardian 클라우드 녹화 > 결제", "depth": 2, "status": "captured", "all_texts_on_card": ["결제"], "sub_page_activity": "com.lumiunited.aqara.web.commonpage.SettingWebActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 6.0, "app_text_count": 28, "app_texts": [{"text": "홈가디언", "type": "text", "class": "WebView"}, {"text": "홈가디언", "type": "text", "class": "TextView"}, {"text": "주문", "type": "text", "class": "Button"}, {"text": "무제한 카메라", "type": "text", "class": "TextView"}, {"text": "단일 카메라", "type": "text", "class": "TextView"}, {"text": "홈가디언 언리미티드", "type": "text", "class": "TextView"}, {"text": "•", "type": "text", "class": "View"}, {"text": "집 안의 모든 카메라를 지원", "type": "text", "class": "TextView"}, {"text": "90일의 비디오 이벤트 기록", "type": "text", "class": "TextView"}, {"text": "사람 형태, 얼굴, 동물, 차량, 소포, 화재 인식", "type": "text", "class": "TextView"}, {"text": "프리미엄 AI 이벤트 감지", "type": "text", "class": "TextView"}, {"text": "AI 비디오 요약, AI 비디오 검색", "type": "text", "class": "TextView"}, {"text": "가족을 선택하세요", "type": "text", "class": "View"}, {"text": "default position1", "type": "text", "class": "TextView"}, {"text": "서비스 유형 선택", "type": "text", "class": "TextView"}, {"text": "매년", "type": "text", "class": "TextView"}, {"text": "$99.99", "type": "text", "class": "TextView"}, {"text": "$179.88", "type": "text", "class": "TextView"}, {"text": "연간 $99.99로 자동 갱신", "type": "text", "class": "TextView"}, {"text": "44% OFF", "type": "text", "class": "TextView"}, {"text": "$9.99", "type": "text", "class": "TextView"}, {"text": "$14.99", "type": "text", "class": "TextView"}, {"text": "월 $9.99로 자동 갱신", "type": "text", "class": "TextView"}, {"text": "33% OFF", "type": "text", "class": "TextView"}, {"text": "지금 결제", "type": "text", "class": "TextView"}, {"text": "홈 가디언 서비스 계약", "type": "text", "class": "TextView"}, {"text": "자동 갱신 계약", "type": "text", "class": "TextView"}, {"text": "을 읽고 동의했습니다.", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "_screenshot": "HomeGuardian_클라우드_녹화_결제.png"}, {"path": "로컬 스토리지", "depth": 1, "status": "captured", "all_texts_on_card": ["로컬 스토리지"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 4.0, "app_text_count": 14, "app_texts": [{"text": "로컬 스토리지", "type": "text", "class": "TextView"}, {"text": "저장 상태", "type": "text", "class": "TextView"}, {"text": "정상", "type": "text", "class": "TextView"}, {"text": "저장 공간", "type": "text", "class": "TextView"}, {"text": "합계 29.70 GB", "type": "text", "class": "TextView"}, {"text": "사용 중：29.47 GB", "type": "text", "class": "TextView"}, {"text": "기타：0.00 MB", "type": "text", "class": "TextView"}, {"text": "사용 가능：241.00 MB", "type": "text", "class": "TextView"}, {"text": "녹화 모드", "type": "text", "class": "TextView"}, {"text": "움직임/소리 감지 시 녹화", "type": "text", "class": "TextView"}, {"text": "루프 녹화", "type": "text", "class": "TextView"}, {"text": "저장공간이 가득 찰 경우, 가장 이전 영상에 덮어쓰기 합니다", "type": "text", "class": "TextView"}, {"text": "NAS네트워크 스토리지", "type": "text", "class": "TextView"}, {"text": "외장메모리카드 초기화", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "로컬_스토리지.png"}, {"path": "로컬 스토리지 > 저장 상태", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["저장 상태", "정상"]}, {"path": "로컬 스토리지 > 녹화 모드", "depth": 2, "status": "captured", "all_texts_on_card": ["녹화 모드", "움직임/소리 감지 시 녹화"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 3, "app_texts": [{"text": "녹화 모드", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "로컬_스토리지_녹화_모드.png"}, {"path": "로컬 스토리지 > 루프 녹화", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["루프 녹화", "저장공간이 가득 찰 경우, 가장 이전 영상에 덮어쓰기 합니다"]}, {"path": "로컬 스토리지 > NAS네트워크 스토리지", "depth": 2, "status": "captured", "all_texts_on_card": ["NAS네트워크 스토리지"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 3, "app_texts": [{"text": "NAS 스토리지", "type": "text", "class": "TextView"}, {"text": "MicroSD 카드의 영상을 NAS에 저장할 수 있습니다.", "type": "text", "class": "TextView"}, {"text": "WIN-NM463EFD28V", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "로컬_스토리지_NAS네트워크_스토리지.png"}, {"path": "하위 장치", "depth": 1, "status": "skipped_jump", "reason": "jump '하위 장치'", "all_texts_on_card": ["하위 장치", "0"]}, {"path": "연결된 와이파이 정보", "depth": 1, "status": "captured", "all_texts_on_card": ["연결된 와이파이 정보"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "still_loading", "wait_elapsed_sec": 20.7, "app_text_count": 13, "app_texts": [{"text": "연결된 와이파이 정보", "type": "text", "class": "TextView"}, {"text": "와이파이 이름", "type": "text", "class": "TextView"}, {"text": "Doo_Aqara_2.4G", "type": "text", "class": "TextView"}, {"text": "와이파이 강도", "type": "text", "class": "TextView"}, {"text": "100%", "type": "text", "class": "TextView"}, {"text": "RSSI", "type": "text", "class": "TextView"}, {"text": "-29", "type": "text", "class": "TextView"}, {"text": "현재 모드", "type": "text", "class": "TextView"}, {"text": "P2P", "type": "text", "class": "TextView"}, {"text": "IP 주소", "type": "text", "class": "TextView"}, {"text": "192.168.50.204", "type": "text", "class": "TextView"}, {"text": "MAC주소", "type": "text", "class": "TextView"}, {"text": "54:EF:44:44:69:27", "type": "text", "class": "TextView"}], "needs_recapture": true, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "연결된_와이파이_정보.png"}, {"path": "연결된 와이파이 정보 > 와이파이 이름", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["와이파이 이름", "Doo_Aqara_2.4G"]}, {"path": "연결된 와이파이 정보 > 와이파이 강도", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["와이파이 강도", "100%"]}, {"path": "연결된 와이파이 정보 > RSSI", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["RSSI", "-29"]}, {"path": "연결된 와이파이 정보 > 현재 모드", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["현재 모드", "P2P"]}, {"path": "연결된 와이파이 정보 > IP 주소", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["IP 주소", "192.168.50.204"]}, {"path": "연결된 와이파이 정보 > MAC주소", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["MAC주소", "54:EF:44:44:69:27"]}, {"path": "펌웨어 업데이트", "depth": 1, "status": "captured", "all_texts_on_card": ["펌웨어 업데이트", "4.5.30_0002.0013"], "sub_page_activity": "com.lumi.ota.firmware.LumiUpgradeFirmwareActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 4, "app_texts": [{"text": "펌웨어 버전", "type": "text", "class": "TextView"}, {"text": "이미 최신버전입니다.", "type": "text", "class": "TextView"}, {"text": "현재 펌웨어 버전: 4.5.30_0002.0013", "type": "text", "class": "TextView"}, {"text": "업데이트 확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "펌웨어_업데이트.png"}, {"path": "펌웨어 업데이트 > 펌웨어 버전", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["펌웨어 버전"]}, {"path": "펌웨어 업데이트 > 업데이트 확인", "depth": 2, "status": "skipped_action", "reason": "action: '업데이트 확인'", "all_texts_on_card": ["업데이트 확인"]}, {"path": "장치 연관 항목", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 연관 항목", "관련 자동화, 장면, 장치 등"], "sub_page_activity": "com.lumiunited.aqara.ifttt.deviceassociationpage.DeviceAssociationActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 5, "app_texts": [{"text": "장치 관련 항목", "type": "text", "class": "TextView"}, {"text": "자동실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}, {"text": "동시실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_연관_항목.png"}, {"path": "장치 연관 항목", "depth": 1, "status": "captured_related_items", "app_text_count": 5, "app_texts": [{"text": "장치 관련 항목", "type": "text", "class": "TextView"}, {"text": "자동실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}, {"text": "동시실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목.png"}, {"path": "장치 연관 항목 > 자동실행 > 추가", "depth": 2, "status": "captured_conditions", "app_text_count": 12, "app_texts": [{"text": "자동실행 추가", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "시작 조건", "type": "text", "class": "TextView"}, {"text": "트리거 조건 추가", "type": "text", "class": "TextView"}, {"text": "추가 조건", "type": "text", "class": "TextView"}, {"text": "불필요한 경우 생략 가능", "type": "text", "class": "TextView"}, {"text": "상태 조건 추가", "type": "text", "class": "TextView"}, {"text": "실행 동작", "type": "text", "class": "TextView"}, {"text": "작업 추가", "type": "text", "class": "TextView"}, {"text": "미리 보기", "type": "text", "class": "TextView"}, {"text": "한 번 실행됨", "type": "text", "class": "TextView"}, {"text": "한 번 실행한 후 자동화가 꺼집니다.", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_추가.png"}, {"path": "장치 연관 항목 > 자동실행 > 트리거 조건 추가", "depth": 3, "status": "captured_options", "app_text_count": 15, "app_texts": [{"text": "트리거 조건 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "시간", "type": "text", "class": "TextView"}, {"text": "예시: 매일 06:00", "type": "text", "class": "TextView"}, {"text": "실외 날씨（Lab）", "type": "text", "class": "TextView"}, {"text": "예시: 밖에 비가 내리기 시작함", "type": "text", "class": "TextView"}, {"text": "지오펜스 2.0 (실험실) <img>", "type": "text", "class": "TextView"}, {"text": "예시: 집 근처에 도착했을 때", "type": "text", "class": "TextView"}, {"text": "음성 지원", "type": "text", "class": "TextView"}, {"text": "예시: 음성 비서에게 \"집에 왔어요\"라고 말하기", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 보호\" 비활성화 시", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "예시: \"누군가 조명을 켬\" 자동화를 켤 때", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_트리거_조건_추가.png"}, {"path": "장치 연관 항목 > 자동실행 > 트리거 조건 추가 > 智能摄像机G2H Pro(国际版)", "depth": 4, "status": "captured_own_in_related", "app_text_count": 13, "app_texts": [{"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "카메라 켜기", "type": "text", "class": "TextView"}, {"text": "카메라 끄기", "type": "text", "class": "TextView"}, {"text": "카메라 켜져 있음", "type": "text", "class": "TextView"}, {"text": "카메라 꺼져 있음", "type": "text", "class": "TextView"}, {"text": "비정상적인 소리 감지됨", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}, {"text": "지정된 얼굴 감지됨", "type": "text", "class": "TextView"}, {"text": "낯선 사람의 얼굴 감지됨", "type": "text", "class": "TextView"}, {"text": "차량 감지됨", "type": "text", "class": "TextView"}, {"text": "동물 감지됨", "type": "text", "class": "TextView"}, {"text": "패키지 감지됨", "type": "text", "class": "TextView"}, {"text": "화염 감지됨(LAB)", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_트리거_조건_추가_智能摄像机G2H_Pro(国际版).png"}, {"path": "장치 연관 항목 > 자동실행 > 상태 조건 추가", "depth": 3, "status": "captured_options", "app_text_count": 11, "app_texts": [{"text": "상태 조건 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: 조도가 30 럭스 미만", "type": "text", "class": "TextView"}, {"text": "실외 날씨（Lab）", "type": "text", "class": "TextView"}, {"text": "예시: 밖에 비가 내릴 때", "type": "text", "class": "TextView"}, {"text": "지오펜스 2.0 (실험실) <img>", "type": "text", "class": "TextView"}, {"text": "예: 특정 영역 내", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"홈 모드\"가 활성화되었을 때", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "자동화가 켜지거나 꺼질 때", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_상태_조건_추가.png"}, {"path": "장치 연관 항목 > 자동실행 > 상태 조건 추가 > 智能摄像机G2H Pro(国际版)", "depth": 4, "status": "captured_own_in_related", "app_text_count": 3, "app_texts": [{"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "카메라 켜져 있음", "type": "text", "class": "TextView"}, {"text": "카메라 꺼져 있음", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_상태_조건_추가_智能摄像机G2H_Pro(国际版).png"}, {"path": "장치 연관 항목 > 자동실행 > 작업 추가", "depth": 3, "status": "captured_options", "app_text_count": 13, "app_texts": [{"text": "실행할 동작 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "딜레이", "type": "text", "class": "TextView"}, {"text": "예시: 30초 지연", "type": "text", "class": "TextView"}, {"text": "알림 및 경고", "type": "text", "class": "TextView"}, {"text": "모바일 앱에 기본/사용자 지정 메시지 푸시", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 모드\" 자동 활성화", "type": "text", "class": "TextView"}, {"text": "동시실행", "type": "text", "class": "TextView"}, {"text": "예시: \"집에 오는 장면\" 실행", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "아무 자동화 켜기/끄기", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_작업_추가.png"}, {"path": "장치 연관 항목 > 자동실행 > 작업 추가 > 智能摄像机G2H Pro(国际版)", "depth": 4, "status": "captured_own_in_related", "app_text_count": 13, "app_texts": [{"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "사생활 보호 모드 끄기", "type": "text", "class": "TextView"}, {"text": "사생활 보호 모드 켜기", "type": "text", "class": "TextView"}, {"text": "클라우드 비디오 녹화", "type": "text", "class": "TextView"}, {"text": "지정된 벨소리 재생", "type": "text", "class": "TextView"}, {"text": "벨소리 재생", "type": "text", "class": "TextView"}, {"text": "맞춤 벨소리 재생", "type": "text", "class": "TextView"}, {"text": "벨소리 재생 중지", "type": "text", "class": "TextView"}, {"text": "야간 모드 항상 켜짐", "type": "text", "class": "TextView"}, {"text": "야간 모드 항상 꺼짐", "type": "text", "class": "TextView"}, {"text": "야간 모드 자동 전환", "type": "text", "class": "TextView"}, {"text": "모션 감지 활성화", "type": "text", "class": "TextView"}, {"text": "모션 감지 비활성화", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_작업_추가_智能摄像机G2H_Pro(国际版).png"}, {"path": "장치 연관 항목 > 동시실행 > 추가", "depth": 2, "status": "captured_conditions", "app_text_count": 5, "app_texts": [{"text": "동시실행추가", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "행동", "type": "text", "class": "TextView"}, {"text": "동작 추가", "type": "text", "class": "TextView"}, {"text": "미리 보기", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_동시실행_추가.png"}, {"path": "장치 연관 항목 > 동시실행 > 동작 추가", "depth": 3, "status": "captured_options", "app_text_count": 11, "app_texts": [{"text": "실행할 동작 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "딜레이", "type": "text", "class": "TextView"}, {"text": "예시: 30초 지연", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 모드\" 자동 활성화", "type": "text", "class": "TextView"}, {"text": "동시실행", "type": "text", "class": "TextView"}, {"text": "예시: \"집에 오는 장면\" 실행", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "아무 자동화 켜기/끄기", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_동시실행_동작_추가.png"}, {"path": "장치 연관 항목 > 동시실행 > 동작 추가 > 智能摄像机G2H Pro(国际版)", "depth": 4, "status": "captured_own_in_related", "app_text_count": 13, "app_texts": [{"text": "智能摄像机G2H Pro(国际版)", "type": "text", "class": "TextView"}, {"text": "사생활 보호 모드 끄기", "type": "text", "class": "TextView"}, {"text": "사생활 보호 모드 켜기", "type": "text", "class": "TextView"}, {"text": "클라우드 비디오 녹화", "type": "text", "class": "TextView"}, {"text": "지정된 벨소리 재생", "type": "text", "class": "TextView"}, {"text": "벨소리 재생", "type": "text", "class": "TextView"}, {"text": "맞춤 벨소리 재생", "type": "text", "class": "TextView"}, {"text": "벨소리 재생 중지", "type": "text", "class": "TextView"}, {"text": "야간 모드 항상 켜짐", "type": "text", "class": "TextView"}, {"text": "야간 모드 항상 꺼짐", "type": "text", "class": "TextView"}, {"text": "야간 모드 자동 전환", "type": "text", "class": "TextView"}, {"text": "모션 감지 활성화", "type": "text", "class": "TextView"}, {"text": "모션 감지 비활성화", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_동시실행_동작_추가_智能摄像机G2H_Pro(国际版).png"}, {"path": "장치 로그", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 로그"], "sub_page_activity": "com.lumi.arn.container.LumiRNMainActivity", "is_rn_plugin": true, "ready_status": "ready", "wait_elapsed_sec": 11.7, "app_text_count": 45, "app_texts": [{"text": "클라우드 로그", "type": "text", "class": "TextView"}, {"text": "로컬 로그", "type": "text", "class": "TextView"}, {"text": "오늘", "type": "text", "class": "TextView"}, {"text": "14:18", "type": "text", "class": "TextView"}, {"text": "움직임 감지", "type": "text", "class": "TextView"}, {"text": "14:17", "type": "text", "class": "TextView"}, {"text": "14:16", "type": "text", "class": "TextView"}, {"text": "14:15", "type": "text", "class": "TextView"}, {"text": "14:14", "type": "text", "class": "TextView"}, {"text": "14:13", "type": "text", "class": "TextView"}, {"text": "14:12", "type": "text", "class": "TextView"}, {"text": "14:11", "type": "text", "class": "TextView"}, {"text": "14:10", "type": "text", "class": "TextView"}, {"text": "14:09", "type": "text", "class": "TextView"}, {"text": "14:08", "type": "text", "class": "TextView"}, {"text": "14:07", "type": "text", "class": "TextView"}, {"text": "14:06", "type": "text", "class": "TextView"}, {"text": "14:05", "type": "text", "class": "TextView"}, {"text": "14:04", "type": "text", "class": "TextView"}, {"text": "14:03", "type": "text", "class": "TextView"}, {"text": "14:02", "type": "text", "class": "TextView"}, {"text": "14:01", "type": "text", "class": "TextView"}, {"text": "14:00", "type": "text", "class": "TextView"}, {"text": "13:59", "type": "text", "class": "TextView"}, {"text": "13:58", "type": "text", "class": "TextView"}, {"text": "13:57", "type": "text", "class": "TextView"}, {"text": "13:56", "type": "text", "class": "TextView"}, {"text": "13:55", "type": "text", "class": "TextView"}, {"text": "13:54", "type": "text", "class": "TextView"}, {"text": "13:53", "type": "text", "class": "TextView"}, {"text": "13:52", "type": "text", "class": "TextView"}, {"text": "13:51", "type": "text", "class": "TextView"}, {"text": "13:50", "type": "text", "class": "TextView"}, {"text": "13:49", "type": "text", "class": "TextView"}, {"text": "13:48", "type": "text", "class": "TextView"}, {"text": "13:47", "type": "text", "class": "TextView"}, {"text": "13:46", "type": "text", "class": "TextView"}, {"text": "13:45", "type": "text", "class": "TextView"}, {"text": "13:44", "type": "text", "class": "TextView"}, {"text": "13:43", "type": "text", "class": "TextView"}, {"text": "13:42", "type": "text", "class": "TextView"}, {"text": "13:41", "type": "text", "class": "TextView"}, {"text": "13:40", "type": "text", "class": "TextView"}, {"text": "13:39", "type": "text", "class": "TextView"}, {"text": "13:38", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "장치_로그.png"}, {"path": "장치 로그 > 클라우드 로그", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["클라우드 로그"]}, {"path": "\"홈 화면 바로 가기\"에 추가", "depth": 1, "status": "captured", "all_texts_on_card": ["\"홈 화면 바로 가기\"에 추가"], "sub_page_activity": "com.android.launcher3.infra.activity.AddItemActivity", "is_rn_plugin": false, "ready_status": "unstable", "wait_elapsed_sec": 20.3, "app_text_count": 0, "app_texts": [], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "_screenshot": "홈_화면_바로_가기_에_추가.png"}]}], "findings": [], "scan_summary": {"tree_count": 2, "items_count": 107, "findings_count": 0}}];
+const RUN_NAME = "traverse_v8_20260522_134343";
+const IS_MULTI = false;
+const EXISTING_CORRECTIONS = {"움직임명 인식됨": "pending", "동시실행": "ignored", "관련 자동실행, 동시실행 등": "ignored", "하위 장치 삭제 방지": "ignored", "자동실행 (0)": "ignored", "동시실행 (0)": "ignored"};  // {wrong_text: status}
+
+// --- Decision management (localStorage-based, 2026-05-19) ---
+const STORAGE_KEY = "aqara-decisions-" + RUN_NAME;
+function loadDecisions() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
+  catch(e) { return {}; }
+}
+function saveDecisions(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+function getDecision(originalText) {
+  // canonical (already in corrections.json) takes priority
+  if (EXISTING_CORRECTIONS[originalText]) {
+    return {source: "canon", status: EXISTING_CORRECTIONS[originalText]};
+  }
+  const d = loadDecisions()[originalText];
+  return d ? {source: "local", status: d.status} : null;
+}
+function setLocalDecision(orig, sug, status, pathHint, deviceLabel) {
+  const decisions = loadDecisions();
+  decisions[orig] = {
+    wrong: orig,
+    fix: status === "ignored" ? "(legacy: keep as-is)" : (sug || "(no fix proposed)"),
+    status: status,
+    device_hint: deviceLabel || null,
+    path_hint: pathHint || null,
+    submitted_at: new Date().toISOString().slice(0, 10),
+  };
+  saveDecisions(decisions);
+  renderFindings();
+  updateExportBar();
+}
+function clearLocalDecision(orig) {
+  const decisions = loadDecisions();
+  delete decisions[orig];
+  saveDecisions(decisions);
+  renderFindings();
+  updateExportBar();
+}
+function clearAllDecisions() {
+  const count = Object.keys(loadDecisions()).length;
+  if (count === 0) return;
+  if (!confirm(`Clear ${count} local decisions? Canonical corrections.json is unaffected.`)) return;
+  localStorage.removeItem(STORAGE_KEY);
+  renderFindings();
+  updateExportBar();
+}
+function exportDecisions() {
+  const items = Object.values(loadDecisions());
+  if (!items.length) { alert("No local decisions to export."); return; }
+  document.getElementById("export-textarea").value = JSON.stringify(items, null, 2);
+  document.getElementById("export-count").textContent = items.length;
+  document.getElementById("export-modal").classList.add("open");
+}
+function copyDecisions() {
+  const t = document.getElementById("export-textarea");
+  t.select();
+  navigator.clipboard.writeText(t.value).then(() => {
+    document.getElementById("copy-status").textContent = "✓ Copied!";
+    setTimeout(() => document.getElementById("copy-status").textContent = "", 2000);
+  });
+}
+function downloadDecisions() {
+  const t = document.getElementById("export-textarea").value;
+  const blob = new Blob([t], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `decisions_${RUN_NAME}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function updateExportBar() {
+  const count = Object.keys(loadDecisions()).length;
+  document.getElementById("export-bar-count").textContent = count;
+  document.getElementById("export-btn").disabled = count === 0;
+}
+
+let currentDevice = 0;
+let ALL_FINDINGS = [];
+let findingsByPath = {};
+let currentIdx = -1;
+
+// ---------- Sidebar rendering ----------
+function renderFindings() {
+  const root = document.getElementById("findings-list");
+  root.innerHTML = "";
+  if (!ALL_FINDINGS.length) {
+    root.innerHTML = '<div class="sidebar-empty">No findings for this device.<br>(Run phase3_audit_proto.py first.)</div>';
+    document.getElementById("findings-title").textContent = "Findings (0)";
+    document.getElementById("finding-counter").textContent = "";
+    return;
+  }
+  document.getElementById("findings-title").textContent = `Findings (${ALL_FINDINGS.length})`;
+  const byPri = {high: [], medium: [], low: [], info: []};
+  ALL_FINDINGS.forEach(f => { (byPri[f.priority] || byPri.info).push(f); });
+  ["high", "medium", "low", "info"].forEach(pri => {
+    if (!byPri[pri].length) return;
+    const group = document.createElement("div");
+    group.className = "finding-group pri-" + pri;
+    const h = document.createElement("h4");
+    h.textContent = `${pri} (${byPri[pri].length})`;
+    group.appendChild(h);
+    byPri[pri].forEach(f => {
+      const item = document.createElement("div");
+      item.className = "finding-item";
+      item.dataset.idx = f._idx;
+      item.dataset.path = f.path;
+      const decision = getDecision(f.original);
+      if (decision) {
+        item.classList.add("decision-" + decision.source + "-" + decision.status);
+      }
+      const badge = document.createElement("span");
+      badge.className = "issue-badge it-" + f.issue_type;
+      badge.textContent = f.issue_type;
+      item.appendChild(badge);
+      // Decision badge if any
+      if (decision) {
+        const pill = document.createElement("span");
+        pill.className = "decision-pill " + decision.source + "-" + decision.status;
+        pill.textContent = (decision.source === "canon" ? "📌 " : "✎ ") + decision.status;
+        item.appendChild(pill);
+      }
+      const orig = document.createElement("span");
+      orig.className = "original";
+      orig.textContent = f.original;
+      item.appendChild(orig);
+      if (f.suggested_translation) {
+        const sug = document.createElement("span");
+        sug.className = "suggestion";
+        sug.textContent = "→ " + f.suggested_translation;
+        item.appendChild(sug);
+      }
+      const ph = document.createElement("span");
+      ph.className = "path-hint";
+      ph.textContent = f.path;
+      item.appendChild(ph);
+      // Action buttons — only if NOT already in canonical corrections.json
+      if (!decision || decision.source !== "canon") {
+        const actions = document.createElement("div");
+        actions.className = "finding-actions";
+        const deviceLabel = DEVICES[currentDevice].label;
+        if (decision && decision.source === "local") {
+          // Already locally decided — show revoke
+          const revoke = document.createElement("button");
+          revoke.textContent = "↩ Undo";
+          revoke.onclick = (e) => { e.stopPropagation(); clearLocalDecision(f.original); };
+          actions.appendChild(revoke);
+        } else {
+          // No decision — show both
+          const bFix = document.createElement("button");
+          bFix.className = "fix";
+          bFix.textContent = "📋 Add to fix list";
+          bFix.title = "Mark this as a Korean translation issue to fix";
+          bFix.onclick = (e) => {
+            e.stopPropagation();
+            setLocalDecision(f.original, f.suggested_translation, "pending", f.path, deviceLabel);
+          };
+          actions.appendChild(bFix);
+          const bIg = document.createElement("button");
+          bIg.className = "ignore";
+          bIg.textContent = "✗ Ignore (legacy)";
+          bIg.title = "Mark as 'won't fix' — used for legacy terms";
+          bIg.onclick = (e) => {
+            e.stopPropagation();
+            setLocalDecision(f.original, f.suggested_translation, "ignored", f.path, deviceLabel);
+          };
+          actions.appendChild(bIg);
+        }
+        item.appendChild(actions);
+      }
+      item.onclick = () => selectFinding(f._idx);
+      group.appendChild(item);
+    });
+    root.appendChild(group);
+  });
+}
+
+function selectFinding(idx) {
+  if (idx < 0 || idx >= ALL_FINDINGS.length) return;
+  currentIdx = idx;
+  document.querySelectorAll(".finding-item.selected").forEach(e => e.classList.remove("selected"));
+  const el = document.querySelector(`.finding-item[data-idx="${idx}"]`);
+  if (el) {
+    el.classList.add("selected");
+    el.scrollIntoView({block: "nearest", behavior: "smooth"});
+  }
+  document.getElementById("finding-counter").textContent = `${idx + 1} / ${ALL_FINDINGS.length}`;
+  jumpToPath(ALL_FINDINGS[idx].path);
+}
+
+function prevFinding() {
+  if (!ALL_FINDINGS.length) return;
+  selectFinding(currentIdx <= 0 ? ALL_FINDINGS.length - 1 : currentIdx - 1);
+}
+function nextFinding() {
+  if (!ALL_FINDINGS.length) return;
+  selectFinding(currentIdx >= ALL_FINDINGS.length - 1 ? 0 : currentIdx + 1);
+}
+
+// ---------- Menu tree rendering ----------
+function statusClass(s) { return "badge b-" + s; }
+
+function renderItem(item) {
+  const li = document.createElement("li");
+  li.className = "item";
+  li.dataset.status = item.status;
+  li.dataset.path = item.path;
+  const path = item.path;
+  const last = path.includes(" > ") ? path.split(" > ").pop() : path;
+  const parents = path.includes(" > ") ? path.substring(0, path.lastIndexOf(" > ") + 3) : "";
+
+  //const hasDetails = ["captured", "captured_chooser"].includes(item.status);
+  const hasDetails = item.status.startsWith("captured") || item.status === "captured_chooser";
+  const row = document.createElement("div");
+  row.className = "row " + (hasDetails ? "expandable" : "leaf");
+
+  const badge = document.createElement("span");
+  badge.className = statusClass(item.status);
+  badge.textContent = item.status;
+  row.appendChild(badge);
+
+  const pathFindings = findingsByPath[path] || [];
+  if (pathFindings.length) {
+    const marker = document.createElement("span");
+    marker.className = "findings-marker";
+    marker.textContent = `⚠ ${pathFindings.length}`;
+    marker.title = pathFindings.map(f => `${f.priority}: ${f.original}`).join("\n");
+    row.appendChild(marker);
+    li.dataset.hasFindings = "1";
+  }
+
+  const pathEl = document.createElement("span");
+  pathEl.className = "path";
+  if (parents) {
+    const p = document.createElement("span"); p.className = "parents"; p.textContent = parents;
+    pathEl.appendChild(p);
+  }
+  const l = document.createElement("span"); l.className = "last"; l.textContent = last;
+  pathEl.appendChild(l);
+  row.appendChild(pathEl);
+
+  const meta = document.createElement("span");
+  meta.className = "meta-info";
+  const metaParts = [];
+  if (item.app_text_count) metaParts.push(`${item.app_text_count} texts`);
+  if (item.faq_expansions_probed) metaParts.push(`FAQ:${item.faq_expansions_probed}q`);
+  if (item.reason) metaParts.push(item.reason);
+  meta.textContent = metaParts.join(" · ");
+  row.appendChild(meta);
+
+  li.appendChild(row);
+
+  if (hasDetails) {
+    const details = document.createElement("div");
+    details.className = "details";
+
+    const textsList = document.createElement("div");
+    textsList.className = "texts-list";
+    const table = document.createElement("table");
+    const findingOriginals = new Set(pathFindings.map(f => f.original));
+    (item.app_texts || []).forEach(t => {
+      const tr = document.createElement("tr");
+      const tdT = document.createElement("td");
+      tdT.className = "ko";
+      const text = t.text || t.content_desc || "(empty)";
+      if (findingOriginals.has(text)) tdT.classList.add("has-finding");
+      tdT.textContent = text;
+      const tdC = document.createElement("td");
+      tdC.className = "cls";
+      tdC.textContent = (t.class || "") + (t.type === "content_desc" ? " [desc]" : "");
+      tr.appendChild(tdT); tr.appendChild(tdC);
+      table.appendChild(tr);
+    });
+    if (!(item.app_texts || []).length) {
+      const em = document.createElement("div"); em.className = "empty";
+      em.textContent = "(no app_texts captured)";
+      textsList.appendChild(em);
+    } else {
+      textsList.appendChild(table);
+    }
+    details.appendChild(textsList);
+
+    const shots = document.createElement("div");
+    shots.className = "screenshots";
+    if (item._screenshot) {
+      const img = document.createElement("img");
+      img.dataset.src = item._screenshot;
+      img.loading = "lazy"; img.title = item._screenshot;
+      img.onclick = () => window.open(item._screenshot, "_blank");
+      shots.appendChild(img);
+    }
+    if (item._faq_screenshots) {
+      const label = document.createElement("div");
+      label.style.fontWeight = "600"; label.style.marginTop = "6px";
+      label.textContent = `FAQ (${item._faq_screenshots.length}):`;
+      shots.appendChild(label);
+      const grid = document.createElement("div"); grid.className = "faq-grid";
+      item._faq_screenshots.forEach(fn => {
+        const img = document.createElement("img");
+        img.dataset.src = fn; img.loading = "lazy"; img.title = fn;
+        img.onclick = () => window.open(fn, "_blank");
+        grid.appendChild(img);
+      });
+      shots.appendChild(grid);
+    }
+    if (!item._screenshot && !item._faq_screenshots) {
+      const em = document.createElement("div"); em.className = "empty";
+      em.textContent = "(no screenshot)";
+      shots.appendChild(em);
+    }
+    details.appendChild(shots);
+
+    li.appendChild(details);
+    row.onclick = () => toggleItem(li);
+  }
+  return li;
+}
+
+function toggleItem(li) {
+  const details = li.querySelector(":scope > .details");
+  const row = li.querySelector(":scope > .row");
+  if (!details) return;
+  const open = details.classList.toggle("open");
+  row.classList.toggle("expanded", open);
+  if (open) loadLazyImages(details);
+}
+
+function loadLazyImages(scope) {
+  scope.querySelectorAll("img[data-src]").forEach(img => {
+    img.src = img.dataset.src; delete img.dataset.src;
+  });
+}
+
+function renderTree(tree) {
+  const section = document.createElement("section");
+  section.className = "tree-section";
+  const header = document.createElement("div");
+  header.className = "tree-header";
+  header.textContent = tree.label;
+  const stats = document.createElement("span");
+  stats.className = "stats";
+  const counts = {};
+  tree.items.forEach(it => { counts[it.status] = (counts[it.status] || 0) + 1; });
+  stats.textContent = `${tree.items.length} items · ${Object.entries(counts).map(([k,v]) => `${k}:${v}`).join(", ")}`;
+  header.appendChild(stats);
+  section.appendChild(header);
+
+  const ul = document.createElement("ul"); ul.className = "items";
+  const itemsByPath = {};
+  tree.items.forEach(it => { itemsByPath[it.path] = { item: it, children: [] }; });
+  const roots = [];
+  tree.items.forEach(it => {
+    if (it.path.includes(" > ")) {
+      const parent = it.path.substring(0, it.path.lastIndexOf(" > "));
+      if (itemsByPath[parent]) itemsByPath[parent].children.push(itemsByPath[it.path]);
+      else roots.push(itemsByPath[it.path]);
+    } else {
+      roots.push(itemsByPath[it.path]);
+    }
+  });
+
+  function attachItem(parent, node) {
+    const li = renderItem(node.item);
+    if (node.children.length) {
+      const childUl = document.createElement("ul"); childUl.className = "items";
+      node.children.forEach(c => attachItem(childUl, c));
+      li.appendChild(childUl);
+    }
+    parent.appendChild(li);
+  }
+  roots.forEach(r => attachItem(ul, r));
+  section.appendChild(ul);
+  return section;
+}
+
+// ---------- Finding → menu sync ----------
+function jumpToPath(path) {
+  const target = document.querySelector(`li.item[data-path="${CSS.escape(path)}"]`);
+  if (!target) { console.warn("path not in tree:", path); return; }
+  let p = target.parentElement;
+  while (p) {
+    if (p.tagName === "LI" && p.classList.contains("item")) {
+      const det = p.querySelector(":scope > .details");
+      const row = p.querySelector(":scope > .row");
+      if (det && !det.classList.contains("open")) {
+        det.classList.add("open"); row.classList.add("expanded"); loadLazyImages(det);
+      }
+    }
+    p = p.parentElement;
+  }
+  const tDet = target.querySelector(":scope > .details");
+  const tRow = target.querySelector(":scope > .row");
+  if (tDet && !tDet.classList.contains("open")) {
+    tDet.classList.add("open"); tRow.classList.add("expanded"); loadLazyImages(tDet);
+  }
+  target.scrollIntoView({behavior: "smooth", block: "center"});
+  target.classList.add("flash-highlight");
+  setTimeout(() => target.classList.remove("flash-highlight"), 2500);
+}
+
+// ---------- Filters ----------
+function applyTreeFilters() {
+  const q = document.getElementById("tree-search").value.toLowerCase();
+  const checked = Array.from(document.querySelectorAll(".status-filter:checked")).map(c => c.value);
+  const all = checked.includes("all");
+  const onlyFindings = document.getElementById("only-with-findings").checked;
+  document.querySelectorAll("li.item").forEach(li => {
+    const status = li.dataset.status;
+    let show = all
+      || (checked.includes("captured") && status.startsWith("captured"))
+      || (checked.includes("vanished") && status === "vanished")
+      || (checked.includes("skipped") && status.startsWith("skipped"));
+    if (show && onlyFindings) {
+      // 自己有 findings 或子树里有 findings 都显示(否则父节点 display:none 会连带隐藏子项)
+      show = li.dataset.hasFindings === "1" || li.dataset.hasFindingsSubtree === "1";
+    }
+    if (show && q) {
+      const text = li.querySelector(".row").textContent.toLowerCase();
+      show = text.includes(q);
+    }
+    li.classList.toggle("hidden", !show);
+  });
+}
+function applyFindingsSearch() {
+  const q = document.getElementById("finding-search").value.toLowerCase();
+  document.querySelectorAll(".finding-item").forEach(it => {
+    const t = it.textContent.toLowerCase();
+    it.classList.toggle("hidden", q !== "" && !t.includes(q));
+  });
+  document.querySelectorAll(".finding-group").forEach(g => {
+    const anyVisible = Array.from(g.querySelectorAll(".finding-item")).some(it => !it.classList.contains("hidden"));
+    g.classList.toggle("hidden", !anyVisible);
+  });
+}
+
+// ---------- Versions header ----------
+function renderVersions(d) {
+  const bar = document.getElementById("versions-bar");
+  bar.innerHTML = "";
+  function add(text, cls = "") {
+    const s = document.createElement("span");
+    if (cls) s.className = cls;
+    s.textContent = text;
+    bar.appendChild(s);
+  }
+  if (d.plugin_main) add(`플러그인 (홈) / Plugin (main): ${d.plugin_main}`);
+  if (d.plugin_settings) add(`플러그인 (설정) / Plugin (settings): ${d.plugin_settings}`);
+  if (!d.plugin_main && !d.plugin_settings) add("플러그인 / Plugin: (N/A)", "absent");
+  add(`펌웨어 / Firmware: ${d.firmware || "(N/A)"}`, d.firmware ? "" : "absent");
+}
+
+// ---------- Switch device ----------
+function switchDevice(idx) {
+  if (idx < 0 || idx >= DEVICES.length) return;
+  currentDevice = idx;
+  const d = DEVICES[idx];
+
+  // Tab active
+  document.querySelectorAll(".device-tab").forEach((t, i) => t.classList.toggle("active", i === idx));
+
+  // Title + meta
+  document.getElementById("title").textContent = d.label;
+  document.getElementById("header-meta").textContent =
+    `run: ${RUN_NAME} · trees: ${d.scan_summary.tree_count} · items: ${d.scan_summary.items_count} · findings: ${d.scan_summary.findings_count}`;
+  renderVersions(d);
+
+  // Set per-device findings state
+  ALL_FINDINGS = (d.findings || []).map((f, i) => ({...f, _idx: i}));
+  findingsByPath = {};
+  ALL_FINDINGS.forEach(f => {
+    if (!findingsByPath[f.path]) findingsByPath[f.path] = [];
+    findingsByPath[f.path].push(f);
+  });
+  currentIdx = -1;
+
+  // Re-render content + sidebar
+  const content = document.getElementById("content");
+  content.innerHTML = "";
+  d.trees.forEach(t => content.appendChild(renderTree(t)));
+
+  // ★ 2026-05-15:propagate findings 标记给 ancestor li
+  //   filter 用 display:none 隐藏父节点会把子树也连带隐藏 → finding 子项看不见
+  //   每个有 findings 的 li,把祖先全标 data-has-findings-subtree="1"
+  document.querySelectorAll('li.item[data-has-findings="1"]').forEach(li => {
+    let p = li.parentElement;
+    while (p) {
+      if (p.tagName === "LI" && p.classList.contains("item")) {
+        p.dataset.hasFindingsSubtree = "1";
+      }
+      p = p.parentElement;
+    }
+  });
+
+  renderFindings();
+  applyTreeFilters();
+
+  // Auto-select first finding
+  if (ALL_FINDINGS.length) setTimeout(() => selectFinding(0), 50);
+
+  // URL fragment for deep-link
+  if (IS_MULTI) location.hash = `#device-${idx}`;
+}
+
+// ---------- Init ----------
+// Wire controls
+document.getElementById("tree-search").addEventListener("input", applyTreeFilters);
+document.getElementById("only-with-findings").addEventListener("change", applyTreeFilters);
+document.querySelectorAll(".status-filter").forEach(cb => {
+  cb.addEventListener("change", e => {
+    if (e.target.value === "all" && e.target.checked) {
+      document.querySelectorAll(".status-filter").forEach(c => { if (c !== e.target) c.checked = false; });
+    } else if (e.target.value !== "all" && e.target.checked) {
+      document.querySelector(".status-filter[value=all]").checked = false;
+    }
+    applyTreeFilters();
+  });
+});
+document.getElementById("finding-search").addEventListener("input", applyFindingsSearch);
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "j") nextFinding();
+  if (e.key === "k") prevFinding();
+  if (e.key === "[" && IS_MULTI) switchDevice(currentDevice > 0 ? currentDevice - 1 : DEVICES.length - 1);
+  if (e.key === "]" && IS_MULTI) switchDevice(currentDevice < DEVICES.length - 1 ? currentDevice + 1 : 0);
+});
+
+// Tab clicks (handled via inline onclick in HTML, but bind here for safety)
+document.querySelectorAll(".device-tab").forEach((tab, i) => {
+  tab.addEventListener("click", () => switchDevice(i));
+});
+
+// Auto-select device from URL fragment or default 0
+const m = location.hash.match(/#device-(\d+)/);
+const initIdx = m ? Math.min(parseInt(m[1]), DEVICES.length - 1) : 0;
+switchDevice(initIdx);
+updateExportBar();
+// Close modal when clicking outside
+document.getElementById("export-modal").addEventListener("click", e => {
+  if (e.target.id === "export-modal") e.currentTarget.classList.remove("open");
+});
+</script>
+</body>
+</html>
