@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Aqara Viewer — 人体传感器 P1</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+         background: #f5f5f7; color: #222; display: flex; flex-direction: column; }
+  header { background: #1d1d1f; color: #fff; padding: 10px 18px; flex-shrink: 0; }
+  header h1 { margin: 0 0 3px 0; font-size: 16px; font-weight: 600; }
+  header .meta { font-size: 11px; opacity: 0.55; font-family: monospace; }
+  header .versions { font-size: 11px; margin-top: 5px; display: flex; gap: 8px; flex-wrap: wrap; }
+  header .versions span { background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 3px;
+                           font-family: monospace; opacity: 0.85; }
+  header .versions span.absent { opacity: 0.4; font-style: italic; }
+
+  .device-tabs { background: #2a2a2c; border-bottom: 1px solid #444; display: flex; gap: 0;
+                  overflow-x: auto; flex-shrink: 0; scrollbar-width: thin; }
+  .device-tab { padding: 8px 14px; cursor: pointer; font-size: 12px; color: #ccc;
+                 border-right: 1px solid #444; white-space: nowrap; flex-shrink: 0; display: flex;
+                 align-items: center; gap: 6px; transition: background 0.15s; }
+  .device-tab:hover { background: #3a3a3c; color: #fff; }
+  .device-tab.active { background: #f5f5f7; color: #222; font-weight: 600; }
+  .device-tab .count { background: rgba(0,0,0,0.15); padding: 1px 6px; border-radius: 8px;
+                        font-size: 10px; font-weight: normal; }
+  .device-tab.active .count { background: rgba(245,166,35,0.25); color: #aa5a00; }
+  .device-tab.error { color: #f88; font-style: italic; }
+  .device-tab .err-mark { color: #f55; font-weight: 600; }
+
+  .controls { background: #fff; padding: 6px 14px; border-bottom: 1px solid #ddd;
+              display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex-shrink: 0; font-size: 11px; }
+  .controls input[type=search] { padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;
+                                  font-size: 11px; width: 200px; }
+  .controls label { cursor: pointer; user-select: none; }
+
+  .workspace { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+  .sidebar { width: 340px; background: #fff; border-right: 1px solid #ddd;
+             overflow-y: auto; flex-shrink: 0; }
+  .sidebar-header { padding: 8px 12px; border-bottom: 1px solid #eee; background: #fafafa;
+                    font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 2; }
+  .sidebar-header .nav-buttons { float: right; }
+  .sidebar-header .nav-buttons button { padding: 2px 7px; border: 1px solid #ccc; background: #fff;
+                                         border-radius: 3px; font-size: 10px; cursor: pointer; margin-left: 3px; }
+  .sidebar-header .nav-buttons button:hover { background: #f0f0f0; }
+  .sidebar-search { padding: 5px 10px; border-bottom: 1px solid #eee; }
+  .sidebar-search input { width: 100%; padding: 3px 7px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; }
+  .finding-group h4 { padding: 5px 12px; margin: 0; background: #f8f8f8; font-size: 10px;
+                       text-transform: uppercase; letter-spacing: 0.5px; color: #777; border-top: 1px solid #eee; }
+  .finding-group.pri-high h4 { color: #c62828; }
+  .finding-group.pri-medium h4 { color: #b08800; }
+  .finding-group.pri-low h4 { color: #555; }
+  .finding-item { padding: 7px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0;
+                  border-left: 3px solid transparent; }
+  .finding-item:hover { background: #f8f8fc; }
+  .finding-item.selected { background: #fff7d6; border-left-color: #f5a623; }
+  .finding-item .issue-badge { display: inline-block; padding: 1px 5px; border-radius: 3px;
+                                font-size: 9px; font-weight: 600; text-transform: uppercase; }
+  .it-chinese_leak, .it-english_leak { background: #ffd6d6; color: #c62828; }
+  .it-typo, .it-duplicate_char { background: #ffe6cc; color: #aa5a00; }
+  .it-awkward, .it-inconsistency, .it-untranslated { background: #fff4cc; color: #b08800; }
+  .finding-item .original { display: block; margin: 3px 0 1px 0; font-size: 12px; font-weight: 500; word-break: break-all; }
+  .finding-item .suggestion { display: block; font-size: 11px; color: #1e6630; margin: 1px 0; }
+  .finding-item .path-hint { display: block; font-size: 10px; color: #888; word-break: break-all; }
+  .sidebar-empty { padding: 24px 14px; text-align: center; color: #888; font-style: italic; font-size: 11px; }
+  /* --- Decision UI (2026-05-19) --- */
+  .finding-actions { display: flex; gap: 4px; margin-top: 6px; }
+  .finding-actions button { font-size: 10px; padding: 3px 8px; border: 1px solid #ccc;
+                             background: #fff; border-radius: 3px; cursor: pointer; color: #333; }
+  .finding-actions button:hover { background: #f0f0f0; }
+  .finding-actions button.fix:hover { background: #e3f2fd; border-color: #1a73e8; color: #1a73e8; }
+  .finding-actions button.ignore:hover { background: #f5f5f5; color: #555; }
+  .decision-pill { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 2px;
+                    margin-left: 4px; vertical-align: middle; font-weight: 600; text-transform: uppercase; }
+  .decision-pill.local-pending  { background: #e3f2fd; color: #1a73e8; }
+  .decision-pill.local-ignored  { background: #eee; color: #666; }
+  .decision-pill.canon-pending  { background: #fff4cc; color: #b08800; }
+  .decision-pill.canon-ignored  { background: #e0e0e0; color: #555; }
+  .decision-pill.canon-verified { background: #d4f4dd; color: #1e6630; }
+  .decision-pill.canon-regressed{ background: #ffd6d6; color: #c62828; }
+  .finding-item.decision-local-ignored, .finding-item.decision-canon-ignored { opacity: 0.55; }
+  .finding-item.decision-canon-verified { opacity: 0.4; }
+  /* Bottom export bar */
+  .export-bar { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #ddd;
+                padding: 7px 12px; font-size: 11px; display: flex; gap: 8px; align-items: center; z-index: 2; }
+  .export-bar button { padding: 4px 10px; border: 1px solid #ccc; background: #fff;
+                       border-radius: 3px; cursor: pointer; font-size: 11px; }
+  .export-bar button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+  .export-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* Modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none;
+              align-items: center; justify-content: center; z-index: 100; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #fff; max-width: 720px; width: 92%; max-height: 80vh;
+           border-radius: 8px; padding: 18px; display: flex; flex-direction: column; }
+  .modal h3 { margin: 0 0 6px 0; font-size: 16px; }
+  .modal .hint { font-size: 11px; color: #666; margin-bottom: 10px; }
+  .modal textarea { flex: 1; font-family: monospace; font-size: 11px; padding: 10px;
+                     border: 1px solid #ccc; border-radius: 4px; min-height: 200px; resize: vertical; }
+  .modal-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .modal-actions .status { margin-right: auto; font-size: 11px; color: #1e6630; }
+  .modal-actions button { padding: 6px 12px; border: 1px solid #ccc; border-radius: 3px;
+                          cursor: pointer; font-size: 12px; background: #fff; }
+  .modal-actions button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+
+  .main { flex: 1; overflow-y: auto; padding: 10px 16px 30px; }
+  .tree-section { background: #fff; border-radius: 8px; margin-bottom: 12px;
+                  box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+  .tree-header { background: #fafafa; padding: 8px 12px; border-bottom: 1px solid #eee;
+                 font-weight: 600; font-size: 12px; }
+  .tree-header .stats { font-weight: 400; font-size: 11px; color: #777; margin-left: 10px; }
+  ul.items { list-style: none; padding: 0; margin: 0; }
+  ul.items ul.items { padding-left: 20px; border-left: 2px solid #eef; }
+  li.item { border-bottom: 1px solid #f0f0f0; transition: background 0.6s; }
+  li.item:last-child { border-bottom: none; }
+  li.item.flash-highlight > .row { background: #fff4cc; }
+  .row { padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .row:hover { background: #f8f8fc; }
+  .row.expandable::before { content: "▶"; font-size: 9px; color: #888; transition: transform 0.15s;
+                             display: inline-block; flex-shrink: 0; width: 9px; }
+  .row.expanded::before { transform: rotate(90deg); }
+  .row.leaf::before { content: "·"; color: #ccc; width: 9px; flex-shrink: 0; }
+  .badge { padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600;
+           text-transform: uppercase; flex-shrink: 0; }
+  .b-captured { background: #d4f4dd; color: #1e6630; }
+  .b-captured_chooser { background: #ffe6cc; color: #aa5a00; }
+  .b-no_navigation, .b-no_navigation_scroll { background: #f0f0f0; color: #666; }
+  .b-skipped_jump { background: #e8eaf6; color: #3949ab; }
+  .b-skipped_danger { background: #ffd6d6; color: #c62828; }
+  .b-skipped_action { background: #fff4cc; color: #b08800; }
+  .b-vanished { background: #f3e5f5; color: #6a1b9a; }
+  .b-cycle_up { background: #e0f7fa; color: #00695c; }
+  .findings-marker { background: #fff4cc; color: #b08800; font-size: 10px; padding: 1px 6px;
+                      border-radius: 3px; font-weight: 600; flex-shrink: 0; }
+  .path { flex: 1; min-width: 0; }
+  .path .last { font-weight: 500; }
+  .path .parents { color: #999; font-size: 11px; }
+  .meta-info { font-size: 11px; color: #888; flex-shrink: 0; }
+  .details { padding: 9px 12px 12px; background: #fbfbfd; display: none; border-top: 1px solid #eef; }
+  .details.open { display: grid; grid-template-columns: 1fr 300px; gap: 12px; }
+  .texts-list { font-size: 12px; }
+  .texts-list table { width: 100%; border-collapse: collapse; }
+  .texts-list td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .texts-list .ko { font-weight: 500; }
+  .texts-list .ko.has-finding { background: #fff4cc; border-left: 3px solid #f5a623; padding-left: 4px; }
+  .texts-list .cls { color: #888; font-size: 10px; }
+  .screenshots { font-size: 12px; }
+  .screenshots img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px;
+                     display: block; margin-bottom: 6px; cursor: zoom-in; }
+  .faq-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+  .faq-grid img { max-width: 100%; cursor: zoom-in; }
+  .hidden { display: none !important; }
+  .empty { color: #999; font-style: italic; font-size: 12px; padding: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">人体传感器 P1</h1>
+  <div class="meta" id="header-meta"></div>
+  <div class="versions" id="versions-bar"></div>
+</header>
+
+
+
+<div class="controls">
+  <input type="search" id="tree-search" placeholder="Filter menu tree...">
+  <label><input type="checkbox" class="status-filter" value="all" checked> all</label>
+  <span style="color:#aaa">|</span>
+  <label><input type="checkbox" class="status-filter" value="captured"> captured</label>
+  <label><input type="checkbox" class="status-filter" value="vanished"> vanished</label>
+  <label><input type="checkbox" class="status-filter" value="skipped"> skipped</label>
+  <label><input type="checkbox" id="show-all-duplicates"> show all (incl. inherited duplicates)</label>
+  <label style="margin-left:auto"><input type="checkbox" id="only-with-findings"> only items with findings ⚠</label>
+</div>
+
+<div class="workspace">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span id="findings-title">Findings</span>
+      <span class="nav-buttons">
+        <button onclick="prevFinding()">◀</button>
+        <button onclick="nextFinding()">▶</button>
+        <span id="finding-counter" style="font-size: 10px; margin-left:6px; color:#888;"></span>
+      </span>
+    </div>
+    <div class="sidebar-search"><input type="search" id="finding-search" placeholder="search findings..."></div>
+    <div id="findings-list"></div>
+    <div class="export-bar">
+      <span><span id="export-bar-count">0</span> local decisions</span>
+      <button id="export-btn" class="primary" onclick="exportDecisions()" disabled>📋 Export</button>
+      <button onclick="clearAllDecisions()" title="Clear all local decisions (does NOT touch canonical corrections.json)">↩ Clear</button>
+    </div>
+  </aside>
+  <main class="main" id="content"></main>
+</div>
+
+<div id="export-modal" class="modal-bg">
+  <div class="modal">
+    <h3>Export <span id="export-count">0</span> local decisions</h3>
+    <div class="hint">
+      Copy this JSON or download as file, then send to the audit engineer.<br>
+      Engineer runs: <code>python phase3_merge_decisions.py decisions.json</code> to merge into corrections.json.
+    </div>
+    <textarea id="export-textarea" spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <span class="status" id="copy-status"></span>
+      <button onclick="copyDecisions()">📋 Copy</button>
+      <button onclick="downloadDecisions()">💾 Download .json</button>
+      <button class="primary" onclick="document.getElementById('export-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEVICES = [{"label": "人体传感器 P1", "safe_name": "", "plugin_main": null, "plugin_settings": null, "firmware": "0.0.0_0012", "trees": [{"label": "device_main", "activity": "com.lumiunited.aqara.device.devicepage.DeviceMainActivity", "page_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "오전 10:46 움직임 감지", "type": "text", "class": "TextView"}, {"text": "모션 감지", "type": "text", "class": "TextView"}, {"text": "오전 10:46  65 lux", "type": "text", "class": "TextView"}, {"text": "조도", "type": "text", "class": "TextView"}, {"text": "배터리", "type": "text", "class": "TextView"}, {"text": "정상", "type": "text", "class": "TextView"}], "items": [{"path": "人体传感器 P1", "depth": 1, "status": "no_navigation", "all_texts_on_card": ["人体传感器 P1"]}, {"path": "오전 10:46 움직임 감지", "depth": 1, "status": "captured", "all_texts_on_card": ["오전 10:46 움직임 감지", "모션 감지"], "sub_page_activity": "com.lumi.module.chart.activity.ChartActivityV2", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.6, "app_text_count": 3, "app_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "06. 02. 이벤트 발생 횟수", "type": "text", "class": "TextView"}, {"text": "표준 시간대:GMT+09:00", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "오전_10_46_움직임_감지.png", "_dedup_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "06. 02. 이벤트 발생 횟수", "type": "text", "class": "TextView"}, {"text": "표준 시간대:GMT+09:00", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "人体传感器 P1", "_title_mismatch": true}, {"path": "오전 10:46  65 lux", "depth": 1, "status": "captured", "all_texts_on_card": ["오전 10:46  65 lux", "조도"], "sub_page_activity": "com.lumi.module.chart.activity.ChartActivityV2", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 5, "app_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "65", "type": "text", "class": "TextView"}, {"text": "Lux", "type": "text", "class": "TextView"}, {"text": "최근 조도", "type": "text", "class": "TextView"}, {"text": "표준 시간대:GMT+09:00", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "오전_10_46_65_lux.png", "_dedup_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "65", "type": "text", "class": "TextView"}, {"text": "Lux", "type": "text", "class": "TextView"}, {"text": "최근 조도", "type": "text", "class": "TextView"}, {"text": "표준 시간대:GMT+09:00", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "人体传感器 P1", "_title_mismatch": true}, {"path": "배터리", "depth": 1, "status": "no_navigation_scroll", "all_texts_on_card": ["배터리", "정상"], "parent_preservation": 1.0, "items_preserved": 1.0, "new_text_count": 1, "scroll_reason": "scroll"}]}, {"label": "settings", "activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "page_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "Default Room", "type": "text", "class": "TextView"}, {"text": "장치 카드", "type": "text", "class": "TextView"}, {"text": "장치 설정", "type": "text", "class": "TextView"}, {"text": "장치 설정", "type": "text", "class": "TextView"}, {"text": "일반 설정", "type": "text", "class": "TextView"}, {"text": "연결된 허브", "type": "text", "class": "TextView"}, {"text": "허브 M3-Doo", "type": "text", "class": "TextView"}, {"text": "신호 강도", "type": "text", "class": "TextView"}, {"text": "보통", "type": "text", "class": "TextView"}, {"text": "펌웨어 업데이트", "type": "text", "class": "TextView"}, {"text": "0.0.0_0012", "type": "text", "class": "TextView"}, {"text": "장치 연관 항목", "type": "text", "class": "TextView"}, {"text": "관련 자동실행, 동시실행 등", "type": "text", "class": "TextView"}, {"text": "장치 교체", "type": "text", "class": "TextView"}, {"text": "다른 장치로 교체", "type": "text", "class": "TextView"}], "items": [{"path": "장치 카드", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 카드"], "sub_page_activity": "com.lumiunited.aqara.device.settingpage.view.homepagesetting.DeviceHomePageSettingAcitivty", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 3, "app_texts": [{"text": "장치 카드", "type": "text", "class": "TextView"}, {"text": "人体传感器", "type": "text", "class": "TextView"}, {"text": "光照度", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_카드.png", "_dedup_texts": [{"text": "장치 카드", "type": "text", "class": "TextView"}], "_hidden_count": 2, "_page_header": "장치 카드"}, {"path": "장치 카드 > 人体传感器", "depth": 2, "status": "captured", "all_texts_on_card": ["人体传感器"], "sub_page_activity": "com.lumiunited.aqara.device.settingpage.view.homepagesetting.DeviceHomePageSettingAcitivty", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 6, "app_texts": [{"text": "장치 카드 수정", "type": "text", "class": "TextView"}, {"text": "人体传感器", "type": "text", "class": "TextView"}, {"text": "아이콘 선택", "type": "text", "class": "TextView"}, {"text": "no", "type": "content_desc", "class": "FrameLayout"}, {"text": "장치 위치", "type": "text", "class": "TextView"}, {"text": "Default Room", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_카드_人体传感器.png", "_dedup_texts": [{"text": "장치 카드 수정", "type": "text", "class": "TextView"}, {"text": "아이콘 선택", "type": "text", "class": "TextView"}, {"text": "no", "type": "content_desc", "class": "FrameLayout"}, {"text": "장치 위치", "type": "text", "class": "TextView"}], "_hidden_count": 2, "_page_header": "장치 카드 수정", "_title_mismatch": true}, {"path": "장치 카드 > 人体传感器 > 人体传感器", "depth": 3, "status": "captured", "all_texts_on_card": ["人体传感器"], "sub_page_activity": "com.lumiunited.aqara.device.settingpage.view.homepagesetting.DeviceHomePageSettingAcitivty", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.8, "app_text_count": 4, "app_texts": [{"text": "이름 변경", "type": "text", "class": "TextView"}, {"text": "人体传感器", "type": "text", "class": "EditText"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "faq_expanded_text_count": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_카드_人体传感器_人体传感器.png", "_dedup_texts": [{"text": "이름 변경", "type": "text", "class": "TextView"}], "_hidden_count": 3}, {"path": "장치 카드 > 人体传感器 > 장치 위치", "depth": 3, "status": "captured", "all_texts_on_card": ["[desc]no", "장치 위치", "Default Room"], "sub_page_activity": "com.lumi.module.position.ui.PositionActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 12, "app_texts": [{"text": "위치 지정", "type": "text", "class": "TextView"}, {"text": "나의 방", "type": "text", "class": "TextView"}, {"text": "Default Room", "type": "text", "class": "TextView"}, {"text": "스터디룸", "type": "text", "class": "TextView"}, {"text": "현관", "type": "text", "class": "TextView"}, {"text": "복도", "type": "text", "class": "TextView"}, {"text": "출입구", "type": "text", "class": "TextView"}, {"text": "화장실", "type": "text", "class": "TextView"}, {"text": "발코니", "type": "text", "class": "TextView"}, {"text": "휴대품 보관소", "type": "text", "class": "TextView"}, {"text": "보관실", "type": "text", "class": "TextView"}, {"text": "바 카운터", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_카드_人体传感器_장치_위치.png", "_dedup_texts": [{"text": "위치 지정", "type": "text", "class": "TextView"}, {"text": "나의 방", "type": "text", "class": "TextView"}, {"text": "스터디룸", "type": "text", "class": "TextView"}, {"text": "현관", "type": "text", "class": "TextView"}, {"text": "복도", "type": "text", "class": "TextView"}, {"text": "출입구", "type": "text", "class": "TextView"}, {"text": "화장실", "type": "text", "class": "TextView"}, {"text": "발코니", "type": "text", "class": "TextView"}, {"text": "휴대품 보관소", "type": "text", "class": "TextView"}, {"text": "보관실", "type": "text", "class": "TextView"}, {"text": "바 카운터", "type": "text", "class": "TextView"}], "_hidden_count": 1, "_page_header": "위치 지정"}, {"path": "장치 카드 > 光照度", "depth": 2, "status": "captured", "all_texts_on_card": ["光照度"], "sub_page_activity": "com.lumiunited.aqara.device.settingpage.view.homepagesetting.DeviceHomePageSettingAcitivty", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 6, "app_texts": [{"text": "장치 카드 수정", "type": "text", "class": "TextView"}, {"text": "光照度", "type": "text", "class": "TextView"}, {"text": "아이콘 선택", "type": "text", "class": "TextView"}, {"text": "no", "type": "content_desc", "class": "FrameLayout"}, {"text": "장치 위치", "type": "text", "class": "TextView"}, {"text": "Default Room", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_카드_光照度.png", "_dedup_texts": [{"text": "장치 카드 수정", "type": "text", "class": "TextView"}, {"text": "아이콘 선택", "type": "text", "class": "TextView"}, {"text": "no", "type": "content_desc", "class": "FrameLayout"}, {"text": "장치 위치", "type": "text", "class": "TextView"}], "_hidden_count": 2, "_page_header": "장치 카드 수정", "_title_mismatch": true}, {"path": "장치 카드 > 光照度 > 光照度", "depth": 3, "status": "captured", "all_texts_on_card": ["光照度"], "sub_page_activity": "com.lumiunited.aqara.device.settingpage.view.homepagesetting.DeviceHomePageSettingAcitivty", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.7, "app_text_count": 4, "app_texts": [{"text": "이름 변경", "type": "text", "class": "TextView"}, {"text": "光照度", "type": "text", "class": "EditText"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "faq_expanded_text_count": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_카드_光照度_光照度.png", "_dedup_texts": [{"text": "이름 변경", "type": "text", "class": "TextView"}], "_hidden_count": 3}, {"path": "장치 카드 > 光照度 > 장치 위치", "depth": 3, "status": "captured", "all_texts_on_card": ["[desc]no", "장치 위치", "Default Room"], "sub_page_activity": "com.lumi.module.position.ui.PositionActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 12, "app_texts": [{"text": "위치 지정", "type": "text", "class": "TextView"}, {"text": "나의 방", "type": "text", "class": "TextView"}, {"text": "Default Room", "type": "text", "class": "TextView"}, {"text": "스터디룸", "type": "text", "class": "TextView"}, {"text": "현관", "type": "text", "class": "TextView"}, {"text": "복도", "type": "text", "class": "TextView"}, {"text": "출입구", "type": "text", "class": "TextView"}, {"text": "화장실", "type": "text", "class": "TextView"}, {"text": "발코니", "type": "text", "class": "TextView"}, {"text": "휴대품 보관소", "type": "text", "class": "TextView"}, {"text": "보관실", "type": "text", "class": "TextView"}, {"text": "바 카운터", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "heuristic", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_카드_光照度_장치_위치.png", "_dedup_texts": [{"text": "위치 지정", "type": "text", "class": "TextView"}, {"text": "나의 방", "type": "text", "class": "TextView"}, {"text": "스터디룸", "type": "text", "class": "TextView"}, {"text": "현관", "type": "text", "class": "TextView"}, {"text": "복도", "type": "text", "class": "TextView"}, {"text": "출입구", "type": "text", "class": "TextView"}, {"text": "화장실", "type": "text", "class": "TextView"}, {"text": "발코니", "type": "text", "class": "TextView"}, {"text": "휴대품 보관소", "type": "text", "class": "TextView"}, {"text": "보관실", "type": "text", "class": "TextView"}, {"text": "바 카운터", "type": "text", "class": "TextView"}], "_hidden_count": 1, "_page_header": "위치 지정"}, {"path": "장치 설정", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 설정"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.8, "app_text_count": 6, "app_texts": [{"text": "장치 설정", "type": "text", "class": "TextView"}, {"text": "감지 간격", "type": "text", "class": "TextView"}, {"text": "30초", "type": "text", "class": "TextView"}, {"text": "트리거 표시기", "type": "text", "class": "TextView"}, {"text": "움직임이 감지되면 파란색 표시등이 한 번 깜박입니다.", "type": "text", "class": "TextView"}, {"text": "민감도 조절", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_설정.png", "_dedup_texts": [{"text": "장치 설정", "type": "text", "class": "TextView"}, {"text": "감지 간격", "type": "text", "class": "TextView"}, {"text": "30초", "type": "text", "class": "TextView"}, {"text": "트리거 표시기", "type": "text", "class": "TextView"}, {"text": "움직임이 감지되면 파란색 표시등이 한 번 깜박입니다.", "type": "text", "class": "TextView"}, {"text": "민감도 조절", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "장치 설정"}, {"path": "장치 설정 > 감지 간격", "depth": 2, "status": "captured", "all_texts_on_card": ["감지 간격", "30초"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 4, "app_texts": [{"text": "감지 간격", "type": "text", "class": "TextView"}, {"text": "사용자 정의", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_감지_간격.png", "_dedup_texts": [{"text": "사용자 정의", "type": "text", "class": "TextView"}], "_hidden_count": 3}, {"path": "장치 설정 > 트리거 표시기", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["트리거 표시기", "움직임이 감지되면 파란색 표시등이 한 번 깜박입니다."]}, {"path": "장치 설정 > 민감도 조절", "depth": 2, "status": "captured", "all_texts_on_card": ["민감도 조절", "중"], "sub_page_activity": "com.lumiunited.aqara.device.settingWidget.SettingPageListViewActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.9, "app_text_count": 3, "app_texts": [{"text": "민감도 조절", "type": "text", "class": "TextView"}, {"text": "취소", "type": "text", "class": "TextView"}, {"text": "확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "is_dismissable_dialog": true, "dismiss_label": "취소", "_screenshot": "장치_설정_민감도_조절.png", "_dedup_texts": [], "_hidden_count": 3}, {"path": "연결된 허브", "depth": 1, "status": "skipped_jump", "reason": "jump '연결된 허브'", "all_texts_on_card": ["연결된 허브", "허브 M3-Doo"]}, {"path": "신호 강도", "depth": 1, "status": "captured", "all_texts_on_card": ["신호 강도", "보통"], "sub_page_activity": "com.lumi.module.chart.activity.ChartActivityV2", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.4, "app_text_count": 7, "app_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "84", "type": "text", "class": "TextView"}, {"text": "보통", "type": "text", "class": "TextView"}, {"text": "현재 신호 강도", "type": "text", "class": "TextView"}, {"text": "우수", "type": "text", "class": "TextView"}, {"text": "보통", "type": "text", "class": "TextView"}, {"text": "약함", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "신호_강도.png", "_dedup_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "84", "type": "text", "class": "TextView"}, {"text": "보통", "type": "text", "class": "TextView"}, {"text": "현재 신호 강도", "type": "text", "class": "TextView"}, {"text": "우수", "type": "text", "class": "TextView"}, {"text": "보통", "type": "text", "class": "TextView"}, {"text": "약함", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "人体传感器 P1", "_title_mismatch": true}, {"path": "펌웨어 업데이트", "depth": 1, "status": "captured", "all_texts_on_card": ["펌웨어 업데이트", "0.0.0_0012"], "sub_page_activity": "com.lumi.ota.firmware.LumiUpgradeFirmwareActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.5, "app_text_count": 4, "app_texts": [{"text": "펌웨어 버전", "type": "text", "class": "TextView"}, {"text": "이미 최신버전입니다.", "type": "text", "class": "TextView"}, {"text": "현재 펌웨어 버전: 0.0.0_0012", "type": "text", "class": "TextView"}, {"text": "업데이트 확인", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "펌웨어_업데이트.png", "_dedup_texts": [{"text": "펌웨어 버전", "type": "text", "class": "TextView"}, {"text": "이미 최신버전입니다.", "type": "text", "class": "TextView"}, {"text": "현재 펌웨어 버전: 0.0.0_0012", "type": "text", "class": "TextView"}, {"text": "업데이트 확인", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "펌웨어 버전"}, {"path": "펌웨어 업데이트 > 펌웨어 버전", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["펌웨어 버전"]}, {"path": "펌웨어 업데이트 > 업데이트 확인", "depth": 2, "status": "skipped_action", "reason": "action: '업데이트 확인'", "all_texts_on_card": ["업데이트 확인"]}, {"path": "장치 연관 항목", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 연관 항목", "관련 자동실행, 동시실행 등"], "sub_page_activity": "com.lumiunited.aqara.ifttt.deviceassociationpage.DeviceAssociationActivity", "is_rn_plugin": false, "ready_status": "ready", "wait_elapsed_sec": 3.6, "app_text_count": 5, "app_texts": [{"text": "장치 관련 항목", "type": "text", "class": "TextView"}, {"text": "자동실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}, {"text": "동시실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_연관_항목.png", "_dedup_texts": [{"text": "장치 관련 항목", "type": "text", "class": "TextView"}, {"text": "자동실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}, {"text": "동시실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "장치 관련 항목"}, {"path": "장치 연관 항목", "depth": 1, "status": "captured_related_items", "app_text_count": 5, "app_texts": [{"text": "장치 관련 항목", "type": "text", "class": "TextView"}, {"text": "자동실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}, {"text": "동시실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목.png", "_dedup_texts": [{"text": "장치 관련 항목", "type": "text", "class": "TextView"}, {"text": "자동실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}, {"text": "동시실행 (0)", "type": "text", "class": "TextView"}, {"text": "추가", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "장치 관련 항목"}, {"path": "장치 연관 항목 > 자동실행 > 추가", "depth": 2, "status": "captured_conditions", "app_text_count": 13, "app_texts": [{"text": "자동실행 추가", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "시작 조건", "type": "text", "class": "TextView"}, {"text": "트리거 조건 추가", "type": "text", "class": "TextView"}, {"text": "추가 조건", "type": "text", "class": "TextView"}, {"text": "불필요한 경우 생략 가능", "type": "text", "class": "TextView"}, {"text": "상태 조건 추가", "type": "text", "class": "TextView"}, {"text": "실행 동작", "type": "text", "class": "TextView"}, {"text": "작업 추가", "type": "text", "class": "TextView"}, {"text": "미리 보기", "type": "text", "class": "TextView"}, {"text": "한 번 실행됨", "type": "text", "class": "TextView"}, {"text": "한 번 실행한 후 자동화가 꺼집니다.", "type": "text", "class": "TextView"}, {"text": "자동화 사용 방법?", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_추가.png", "_dedup_texts": [{"text": "자동실행 추가", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "시작 조건", "type": "text", "class": "TextView"}, {"text": "트리거 조건 추가", "type": "text", "class": "TextView"}, {"text": "추가 조건", "type": "text", "class": "TextView"}, {"text": "불필요한 경우 생략 가능", "type": "text", "class": "TextView"}, {"text": "상태 조건 추가", "type": "text", "class": "TextView"}, {"text": "실행 동작", "type": "text", "class": "TextView"}, {"text": "작업 추가", "type": "text", "class": "TextView"}, {"text": "미리 보기", "type": "text", "class": "TextView"}, {"text": "한 번 실행됨", "type": "text", "class": "TextView"}, {"text": "한 번 실행한 후 자동화가 꺼집니다.", "type": "text", "class": "TextView"}, {"text": "자동화 사용 방법?", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "자동실행 추가"}, {"path": "장치 연관 항목 > 자동실행 > 트리거 조건 추가", "depth": 3, "status": "captured_options", "app_text_count": 15, "app_texts": [{"text": "트리거 조건 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "시간", "type": "text", "class": "TextView"}, {"text": "예시: 매일 06:00", "type": "text", "class": "TextView"}, {"text": "실외 날씨（Lab）", "type": "text", "class": "TextView"}, {"text": "예시: 밖에 비가 내리기 시작함", "type": "text", "class": "TextView"}, {"text": "지오펜스 2.0 (실험실) <img>", "type": "text", "class": "TextView"}, {"text": "예시: 집 근처에 도착했을 때", "type": "text", "class": "TextView"}, {"text": "음성 지원", "type": "text", "class": "TextView"}, {"text": "예시: 음성 비서에게 \"집에 왔어요\"라고 말하기", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 보호\" 비활성화 시", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "예시: \"누군가 조명을 켬\" 자동화를 켤 때", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_트리거_조건_추가.png", "_dedup_texts": [{"text": "트리거 조건 선택", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "시간", "type": "text", "class": "TextView"}, {"text": "예시: 매일 06:00", "type": "text", "class": "TextView"}, {"text": "실외 날씨（Lab）", "type": "text", "class": "TextView"}, {"text": "예시: 밖에 비가 내리기 시작함", "type": "text", "class": "TextView"}, {"text": "지오펜스 2.0 (실험실) <img>", "type": "text", "class": "TextView"}, {"text": "예시: 집 근처에 도착했을 때", "type": "text", "class": "TextView"}, {"text": "음성 지원", "type": "text", "class": "TextView"}, {"text": "예시: 음성 비서에게 \"집에 왔어요\"라고 말하기", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 보호\" 비활성화 시", "type": "text", "class": "TextView"}, {"text": "예시: \"누군가 조명을 켬\" 자동화를 켤 때", "type": "text", "class": "TextView"}], "_hidden_count": 3, "_page_header": "트리거 조건 선택"}, {"path": "장치 연관 항목 > 자동실행 > 트리거 조건 추가 > 人体传感器 P1", "depth": 4, "status": "captured_own_in_related", "app_text_count": 6, "app_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "누군가 이동합니다.", "type": "text", "class": "TextView"}, {"text": "설정한 시간 이상 움직임 없음", "type": "text", "class": "TextView"}, {"text": "누군가 이동하며 조도가 지정 수치보다 높습니다.", "type": "text", "class": "TextView"}, {"text": "(움직임을 감지했을 때) 설정한 조도보다 낮은 경우", "type": "text", "class": "TextView"}, {"text": "일정 시간 내에 아무도 이동하지 않았습니다.", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_트리거_조건_추가_人体传感器_P1.png", "_dedup_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "누군가 이동합니다.", "type": "text", "class": "TextView"}, {"text": "설정한 시간 이상 움직임 없음", "type": "text", "class": "TextView"}, {"text": "누군가 이동하며 조도가 지정 수치보다 높습니다.", "type": "text", "class": "TextView"}, {"text": "(움직임을 감지했을 때) 설정한 조도보다 낮은 경우", "type": "text", "class": "TextView"}, {"text": "일정 시간 내에 아무도 이동하지 않았습니다.", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "人体传感器 P1"}, {"path": "장치 연관 항목 > 자동실행 > 상태 조건 추가", "depth": 3, "status": "captured_options", "app_text_count": 11, "app_texts": [{"text": "상태 조건 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: 조도가 30 럭스 미만", "type": "text", "class": "TextView"}, {"text": "실외 날씨（Lab）", "type": "text", "class": "TextView"}, {"text": "예시: 밖에 비가 내릴 때", "type": "text", "class": "TextView"}, {"text": "지오펜스 2.0 (실험실) <img>", "type": "text", "class": "TextView"}, {"text": "예: 특정 영역 내", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"홈 모드\"가 활성화되었을 때", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "자동화가 켜지거나 꺼질 때", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_상태_조건_추가.png", "_dedup_texts": [{"text": "상태 조건 선택", "type": "text", "class": "TextView"}, {"text": "예시: 조도가 30 럭스 미만", "type": "text", "class": "TextView"}, {"text": "실외 날씨（Lab）", "type": "text", "class": "TextView"}, {"text": "예시: 밖에 비가 내릴 때", "type": "text", "class": "TextView"}, {"text": "지오펜스 2.0 (실험실) <img>", "type": "text", "class": "TextView"}, {"text": "예: 특정 영역 내", "type": "text", "class": "TextView"}, {"text": "예시: \"홈 모드\"가 활성화되었을 때", "type": "text", "class": "TextView"}, {"text": "자동화가 켜지거나 꺼질 때", "type": "text", "class": "TextView"}], "_hidden_count": 3, "_page_header": "상태 조건 선택"}, {"path": "장치 연관 항목 > 자동실행 > 상태 조건 추가 > 人体传感器 P1", "depth": 4, "status": "captured_own_in_related", "app_text_count": 2, "app_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "일정 시간 내에 아무도 이동하지 않았습니다.", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_상태_조건_추가_人体传感器_P1.png", "_dedup_texts": [{"text": "人体传感器 P1", "type": "text", "class": "TextView"}, {"text": "일정 시간 내에 아무도 이동하지 않았습니다.", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "人体传感器 P1"}, {"path": "장치 연관 항목 > 자동실행 > 작업 추가", "depth": 3, "status": "captured_options", "app_text_count": 13, "app_texts": [{"text": "실행할 동작 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "딜레이", "type": "text", "class": "TextView"}, {"text": "예시: 30초 지연", "type": "text", "class": "TextView"}, {"text": "알림 및 경고", "type": "text", "class": "TextView"}, {"text": "모바일 앱에 기본/사용자 지정 메시지 푸시", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 모드\" 자동 활성화", "type": "text", "class": "TextView"}, {"text": "동시실행", "type": "text", "class": "TextView"}, {"text": "예시: \"집에 오는 장면\" 실행", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "아무 자동화 켜기/끄기", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_자동실행_작업_추가.png", "_dedup_texts": [{"text": "실행할 동작 선택", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "딜레이", "type": "text", "class": "TextView"}, {"text": "예시: 30초 지연", "type": "text", "class": "TextView"}, {"text": "알림 및 경고", "type": "text", "class": "TextView"}, {"text": "모바일 앱에 기본/사용자 지정 메시지 푸시", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 모드\" 자동 활성화", "type": "text", "class": "TextView"}, {"text": "동시실행", "type": "text", "class": "TextView"}, {"text": "예시: \"집에 오는 장면\" 실행", "type": "text", "class": "TextView"}, {"text": "아무 자동화 켜기/끄기", "type": "text", "class": "TextView"}], "_hidden_count": 3, "_page_header": "실행할 동작 선택"}, {"path": "장치 연관 항목 > 동시실행 > 추가", "depth": 2, "status": "captured_conditions", "app_text_count": 5, "app_texts": [{"text": "동시실행추가", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "행동", "type": "text", "class": "TextView"}, {"text": "동작 추가", "type": "text", "class": "TextView"}, {"text": "미리 보기", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_동시실행_추가.png", "_dedup_texts": [{"text": "동시실행추가", "type": "text", "class": "TextView"}, {"text": "저장", "type": "text", "class": "TextView"}, {"text": "행동", "type": "text", "class": "TextView"}, {"text": "동작 추가", "type": "text", "class": "TextView"}, {"text": "미리 보기", "type": "text", "class": "TextView"}], "_hidden_count": 0, "_page_header": "동시실행추가"}, {"path": "장치 연관 항목 > 동시실행 > 동작 추가", "depth": 3, "status": "captured_options", "app_text_count": 11, "app_texts": [{"text": "실행할 동작 선택", "type": "text", "class": "TextView"}, {"text": "장치", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "딜레이", "type": "text", "class": "TextView"}, {"text": "예시: 30초 지연", "type": "text", "class": "TextView"}, {"text": "경보 시스템", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 모드\" 자동 활성화", "type": "text", "class": "TextView"}, {"text": "동시실행", "type": "text", "class": "TextView"}, {"text": "예시: \"집에 오는 장면\" 실행", "type": "text", "class": "TextView"}, {"text": "자동실행", "type": "text", "class": "TextView"}, {"text": "아무 자동화 켜기/끄기", "type": "text", "class": "TextView"}], "_screenshot": "장치_연관_항목_동시실행_동작_추가.png", "_dedup_texts": [{"text": "실행할 동작 선택", "type": "text", "class": "TextView"}, {"text": "예시: \"천장 조명\" 켜기", "type": "text", "class": "TextView"}, {"text": "딜레이", "type": "text", "class": "TextView"}, {"text": "예시: 30초 지연", "type": "text", "class": "TextView"}, {"text": "예시: \"외출 모드\" 자동 활성화", "type": "text", "class": "TextView"}, {"text": "동시실행", "type": "text", "class": "TextView"}, {"text": "예시: \"집에 오는 장면\" 실행", "type": "text", "class": "TextView"}, {"text": "아무 자동화 켜기/끄기", "type": "text", "class": "TextView"}], "_hidden_count": 3, "_page_header": "실행할 동작 선택"}, {"path": "장치 교체", "depth": 1, "status": "skipped_danger", "reason": "keyword '교체' in '장치 교체'", "all_texts_on_card": ["장치 교체", "다른 장치로 교체"]}, {"path": "장치 로그", "depth": 1, "status": "captured", "all_texts_on_card": ["장치 로그"], "sub_page_activity": "com.lumi.arn.container.LumiRNMainActivity", "is_rn_plugin": true, "ready_status": "ready", "wait_elapsed_sec": 14.3, "app_text_count": 30, "app_texts": [{"text": "클라우드 로그", "type": "text", "class": "TextView"}, {"text": "로컬 로그", "type": "text", "class": "TextView"}, {"text": "오늘", "type": "text", "class": "TextView"}, {"text": "10:46 AM", "type": "text", "class": "TextView"}, {"text": "동작감지", "type": "text", "class": "TextView"}, {"text": "人体传感器", "type": "text", "class": "TextView"}, {"text": "조도65 Lux", "type": "text", "class": "TextView"}, {"text": "光照度", "type": "text", "class": "TextView"}, {"text": "10:35 AM", "type": "text", "class": "TextView"}, {"text": "조도10 Lux", "type": "text", "class": "TextView"}, {"text": "09:42 AM", "type": "text", "class": "TextView"}, {"text": "09:06 AM", "type": "text", "class": "TextView"}, {"text": "조도453 Lux", "type": "text", "class": "TextView"}, {"text": "09:05 AM", "type": "text", "class": "TextView"}, {"text": "조도51 Lux", "type": "text", "class": "TextView"}, {"text": "조도35 Lux", "type": "text", "class": "TextView"}, {"text": "08:49 AM", "type": "text", "class": "TextView"}, {"text": "조도9 Lux", "type": "text", "class": "TextView"}, {"text": "07:58 AM", "type": "text", "class": "TextView"}, {"text": "07:05 AM", "type": "text", "class": "TextView"}, {"text": "06:12 AM", "type": "text", "class": "TextView"}, {"text": "05:18 AM", "type": "text", "class": "TextView"}, {"text": "04:27 AM", "type": "text", "class": "TextView"}, {"text": "03:34 AM", "type": "text", "class": "TextView"}, {"text": "조도8 Lux", "type": "text", "class": "TextView"}, {"text": "02:41 AM", "type": "text", "class": "TextView"}, {"text": "01:50 AM", "type": "text", "class": "TextView"}, {"text": "12:58 AM", "type": "text", "class": "TextView"}, {"text": "12:04 AM", "type": "text", "class": "TextView"}, {"text": "더 이상 내용 없음", "type": "text", "class": "TextView"}], "needs_recapture": false, "needs_ocr": false, "anchor_used": "known", "faq_expansions_probed": null, "faq_expanded_text_count": null, "_screenshot": "장치_로그.png", "_dedup_texts": [{"text": "클라우드 로그", "type": "text", "class": "TextView"}, {"text": "로컬 로그", "type": "text", "class": "TextView"}, {"text": "오늘", "type": "text", "class": "TextView"}, {"text": "10:46 AM", "type": "text", "class": "TextView"}, {"text": "동작감지", "type": "text", "class": "TextView"}, {"text": "조도65 Lux", "type": "text", "class": "TextView"}, {"text": "10:35 AM", "type": "text", "class": "TextView"}, {"text": "조도10 Lux", "type": "text", "class": "TextView"}, {"text": "09:42 AM", "type": "text", "class": "TextView"}, {"text": "09:06 AM", "type": "text", "class": "TextView"}, {"text": "조도453 Lux", "type": "text", "class": "TextView"}, {"text": "09:05 AM", "type": "text", "class": "TextView"}, {"text": "조도51 Lux", "type": "text", "class": "TextView"}, {"text": "조도35 Lux", "type": "text", "class": "TextView"}, {"text": "08:49 AM", "type": "text", "class": "TextView"}, {"text": "조도9 Lux", "type": "text", "class": "TextView"}, {"text": "07:58 AM", "type": "text", "class": "TextView"}, {"text": "07:05 AM", "type": "text", "class": "TextView"}, {"text": "06:12 AM", "type": "text", "class": "TextView"}, {"text": "05:18 AM", "type": "text", "class": "TextView"}, {"text": "04:27 AM", "type": "text", "class": "TextView"}, {"text": "03:34 AM", "type": "text", "class": "TextView"}, {"text": "조도8 Lux", "type": "text", "class": "TextView"}, {"text": "02:41 AM", "type": "text", "class": "TextView"}, {"text": "01:50 AM", "type": "text", "class": "TextView"}, {"text": "12:58 AM", "type": "text", "class": "TextView"}, {"text": "12:04 AM", "type": "text", "class": "TextView"}, {"text": "더 이상 내용 없음", "type": "text", "class": "TextView"}], "_hidden_count": 2, "_page_header": "클라우드 로그"}, {"path": "장치 로그 > 클라우드 로그", "depth": 2, "status": "no_navigation", "all_texts_on_card": ["클라우드 로그"]}]}], "findings": [], "scan_summary": {"tree_count": 2, "items_count": 33, "findings_count": 0}}];
+const RUN_NAME = "traverse_v8_20260602_111413";
+const IS_MULTI = false;
+const EXISTING_CORRECTIONS = {"움직임명 인식됨": "pending", "동시실행": "ignored", "관련 자동실행, 동시실행 등": "ignored", "하위 장치 삭제 방지": "ignored", "자동실행 (0)": "ignored", "동시실행 (0)": "ignored"};  // {wrong_text: status}
+
+// --- Decision management (localStorage-based, 2026-05-19) ---
+const STORAGE_KEY = "aqara-decisions-" + RUN_NAME;
+function loadDecisions() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
+  catch(e) { return {}; }
+}
+function saveDecisions(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+function getDecision(originalText) {
+  // canonical (already in corrections.json) takes priority
+  if (EXISTING_CORRECTIONS[originalText]) {
+    return {source: "canon", status: EXISTING_CORRECTIONS[originalText]};
+  }
+  const d = loadDecisions()[originalText];
+  return d ? {source: "local", status: d.status} : null;
+}
+function setLocalDecision(orig, sug, status, pathHint, deviceLabel) {
+  const decisions = loadDecisions();
+  decisions[orig] = {
+    wrong: orig,
+    fix: status === "ignored" ? "(legacy: keep as-is)" : (sug || "(no fix proposed)"),
+    status: status,
+    device_hint: deviceLabel || null,
+    path_hint: pathHint || null,
+    submitted_at: new Date().toISOString().slice(0, 10),
+  };
+  saveDecisions(decisions);
+  renderFindings();
+  updateExportBar();
+}
+function clearLocalDecision(orig) {
+  const decisions = loadDecisions();
+  delete decisions[orig];
+  saveDecisions(decisions);
+  renderFindings();
+  updateExportBar();
+}
+function clearAllDecisions() {
+  const count = Object.keys(loadDecisions()).length;
+  if (count === 0) return;
+  if (!confirm(`Clear ${count} local decisions? Canonical corrections.json is unaffected.`)) return;
+  localStorage.removeItem(STORAGE_KEY);
+  renderFindings();
+  updateExportBar();
+}
+function exportDecisions() {
+  const items = Object.values(loadDecisions());
+  if (!items.length) { alert("No local decisions to export."); return; }
+  document.getElementById("export-textarea").value = JSON.stringify(items, null, 2);
+  document.getElementById("export-count").textContent = items.length;
+  document.getElementById("export-modal").classList.add("open");
+}
+function copyDecisions() {
+  const t = document.getElementById("export-textarea");
+  t.select();
+  navigator.clipboard.writeText(t.value).then(() => {
+    document.getElementById("copy-status").textContent = "✓ Copied!";
+    setTimeout(() => document.getElementById("copy-status").textContent = "", 2000);
+  });
+}
+function downloadDecisions() {
+  const t = document.getElementById("export-textarea").value;
+  const blob = new Blob([t], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `decisions_${RUN_NAME}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function updateExportBar() {
+  const count = Object.keys(loadDecisions()).length;
+  document.getElementById("export-bar-count").textContent = count;
+  document.getElementById("export-btn").disabled = count === 0;
+}
+
+let currentDevice = 0;
+let ALL_FINDINGS = [];
+let findingsByPath = {};
+let currentIdx = -1;
+
+// ---------- Sidebar rendering ----------
+function renderFindings() {
+  const root = document.getElementById("findings-list");
+  root.innerHTML = "";
+  if (!ALL_FINDINGS.length) {
+    root.innerHTML = '<div class="sidebar-empty">No findings for this device.<br>(Run phase3_audit_proto.py first.)</div>';
+    document.getElementById("findings-title").textContent = "Findings (0)";
+    document.getElementById("finding-counter").textContent = "";
+    return;
+  }
+  document.getElementById("findings-title").textContent = `Findings (${ALL_FINDINGS.length})`;
+  const byPri = {high: [], medium: [], low: [], info: []};
+  ALL_FINDINGS.forEach(f => { (byPri[f.priority] || byPri.info).push(f); });
+  ["high", "medium", "low", "info"].forEach(pri => {
+    if (!byPri[pri].length) return;
+    const group = document.createElement("div");
+    group.className = "finding-group pri-" + pri;
+    const h = document.createElement("h4");
+    h.textContent = `${pri} (${byPri[pri].length})`;
+    group.appendChild(h);
+    byPri[pri].forEach(f => {
+      const item = document.createElement("div");
+      item.className = "finding-item";
+      item.dataset.idx = f._idx;
+      item.dataset.path = f.path;
+      const decision = getDecision(f.original);
+      if (decision) {
+        item.classList.add("decision-" + decision.source + "-" + decision.status);
+      }
+      const badge = document.createElement("span");
+      badge.className = "issue-badge it-" + f.issue_type;
+      badge.textContent = f.issue_type;
+      item.appendChild(badge);
+      // Decision badge if any
+      if (decision) {
+        const pill = document.createElement("span");
+        pill.className = "decision-pill " + decision.source + "-" + decision.status;
+        pill.textContent = (decision.source === "canon" ? "📌 " : "✎ ") + decision.status;
+        item.appendChild(pill);
+      }
+      const orig = document.createElement("span");
+      orig.className = "original";
+      orig.textContent = f.original;
+      item.appendChild(orig);
+      if (f.suggested_translation) {
+        const sug = document.createElement("span");
+        sug.className = "suggestion";
+        sug.textContent = "→ " + f.suggested_translation;
+        item.appendChild(sug);
+      }
+      const ph = document.createElement("span");
+      ph.className = "path-hint";
+      ph.textContent = f.path;
+      item.appendChild(ph);
+      // Action buttons — only if NOT already in canonical corrections.json
+      if (!decision || decision.source !== "canon") {
+        const actions = document.createElement("div");
+        actions.className = "finding-actions";
+        const deviceLabel = DEVICES[currentDevice].label;
+        if (decision && decision.source === "local") {
+          // Already locally decided — show revoke
+          const revoke = document.createElement("button");
+          revoke.textContent = "↩ Undo";
+          revoke.onclick = (e) => { e.stopPropagation(); clearLocalDecision(f.original); };
+          actions.appendChild(revoke);
+        } else {
+          // No decision — show both
+          const bFix = document.createElement("button");
+          bFix.className = "fix";
+          bFix.textContent = "📋 Add to fix list";
+          bFix.title = "Mark this as a Korean translation issue to fix";
+          bFix.onclick = (e) => {
+            e.stopPropagation();
+            setLocalDecision(f.original, f.suggested_translation, "pending", f.path, deviceLabel);
+          };
+          actions.appendChild(bFix);
+          const bIg = document.createElement("button");
+          bIg.className = "ignore";
+          bIg.textContent = "✗ Ignore (legacy)";
+          bIg.title = "Mark as 'won't fix' — used for legacy terms";
+          bIg.onclick = (e) => {
+            e.stopPropagation();
+            setLocalDecision(f.original, f.suggested_translation, "ignored", f.path, deviceLabel);
+          };
+          actions.appendChild(bIg);
+        }
+        item.appendChild(actions);
+      }
+      item.onclick = () => selectFinding(f._idx);
+      group.appendChild(item);
+    });
+    root.appendChild(group);
+  });
+}
+
+function selectFinding(idx) {
+  if (idx < 0 || idx >= ALL_FINDINGS.length) return;
+  currentIdx = idx;
+  document.querySelectorAll(".finding-item.selected").forEach(e => e.classList.remove("selected"));
+  const el = document.querySelector(`.finding-item[data-idx="${idx}"]`);
+  if (el) {
+    el.classList.add("selected");
+    el.scrollIntoView({block: "nearest", behavior: "smooth"});
+  }
+  document.getElementById("finding-counter").textContent = `${idx + 1} / ${ALL_FINDINGS.length}`;
+  jumpToPath(ALL_FINDINGS[idx].path);
+}
+
+function prevFinding() {
+  if (!ALL_FINDINGS.length) return;
+  selectFinding(currentIdx <= 0 ? ALL_FINDINGS.length - 1 : currentIdx - 1);
+}
+function nextFinding() {
+  if (!ALL_FINDINGS.length) return;
+  selectFinding(currentIdx >= ALL_FINDINGS.length - 1 ? 0 : currentIdx + 1);
+}
+
+// ---------- Menu tree rendering ----------
+function statusClass(s) { return "badge b-" + s; }
+
+function renderItem(item) {
+  const li = document.createElement("li");
+  li.className = "item";
+  li.dataset.status = item.status;
+  li.dataset.path = item.path;
+  const path = item.path;
+  const last = path.includes(" > ") ? path.split(" > ").pop() : path;
+  const parents = path.includes(" > ") ? path.substring(0, path.lastIndexOf(" > ") + 3) : "";
+
+  //const hasDetails = ["captured", "captured_chooser"].includes(item.status);
+  const hasDetails = item.status.startsWith("captured") || item.status === "captured_chooser";
+  const row = document.createElement("div");
+  row.className = "row " + (hasDetails ? "expandable" : "leaf");
+
+  const badge = document.createElement("span");
+  badge.className = statusClass(item.status);
+  badge.textContent = item.status;
+  row.appendChild(badge);
+
+  const pathFindings = findingsByPath[path] || [];
+  if (pathFindings.length) {
+    const marker = document.createElement("span");
+    marker.className = "findings-marker";
+    marker.textContent = `⚠ ${pathFindings.length}`;
+    marker.title = pathFindings.map(f => `${f.priority}: ${f.original}`).join("\n");
+    row.appendChild(marker);
+    li.dataset.hasFindings = "1";
+  }
+
+  const pathEl = document.createElement("span");
+  pathEl.className = "path";
+  if (parents) {
+    const p = document.createElement("span"); p.className = "parents"; p.textContent = parents;
+    pathEl.appendChild(p);
+  }
+  const l = document.createElement("span"); l.className = "last"; l.textContent = last;
+  pathEl.appendChild(l);
+  row.appendChild(pathEl);
+
+  const meta = document.createElement("span");
+  meta.className = "meta-info";
+  const metaParts = [];
+  if (item.app_text_count) metaParts.push(`${item.app_text_count} texts`);
+  if (item.faq_expansions_probed) metaParts.push(`FAQ:${item.faq_expansions_probed}q`);
+  if (item.reason) metaParts.push(item.reason);
+  meta.textContent = metaParts.join(" · ");
+  row.appendChild(meta);
+
+  // ★ case #62: title-mismatch indicator in tree list (sidebar 一眼可识别)
+  if (item._title_mismatch && item._page_header) {
+    const tag = document.createElement("span");
+    tag.style.cssText = "color:#f5a623; font-weight:600; margin-left:6px; font-size:11px;";
+    tag.title = `Screenshot shows: ${item._page_header}`;
+    tag.textContent = `⚠`;
+    row.appendChild(tag);
+  }
+
+  li.appendChild(row);
+
+  if (hasDetails) {
+    const details = document.createElement("div");
+    details.className = "details";
+
+    const textsList = document.createElement("div");
+    textsList.className = "texts-list";
+    const table = document.createElement("table");
+    const findingOriginals = new Set(pathFindings.map(f => f.original));
+    // ★ case #61 (2026-05-27): viewer-side dedup — default 用 _dedup_texts(去除祖先 path 重复),
+    // 用户开 "Show all" toggle 时切回 app_texts。toggle 状态存 localStorage,跨刷新保留。
+    const showAllDuplicates = (localStorage.getItem("show_all_duplicates") === "1");
+    const renderTexts = (!showAllDuplicates && item._dedup_texts !== undefined)
+                       ? item._dedup_texts
+                       : (item.app_texts || []);
+    const hiddenN = (!showAllDuplicates && typeof item._hidden_count === "number") ? item._hidden_count : 0;
+    if (hiddenN > 0) {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:10px; color:#999; padding:3px 8px; font-style:italic;";
+      note.textContent = `(${hiddenN} duplicate text${hiddenN > 1 ? "s" : ""} inherited from parent path — hidden; toggle "Show all" above to reveal)`;
+      textsList.appendChild(note);
+    }
+    renderTexts.forEach(t => {
+      const tr = document.createElement("tr");
+      const tdT = document.createElement("td");
+      tdT.className = "ko";
+      const text = t.text || t.content_desc || "(empty)";
+      if (findingOriginals.has(text)) tdT.classList.add("has-finding");
+      tdT.textContent = text;
+      const tdC = document.createElement("td");
+      tdC.className = "cls";
+      tdC.textContent = (t.class || "") + (t.type === "content_desc" ? " [desc]" : "");
+      tr.appendChild(tdT); tr.appendChild(tdC);
+      table.appendChild(tr);
+    });
+    if (!renderTexts.length) {
+      const em = document.createElement("div"); em.className = "empty";
+      em.textContent = hiddenN > 0
+        ? `(all ${hiddenN} texts inherited from parent — none unique to this page)`
+        : "(no app_texts captured)";
+      textsList.appendChild(em);
+    } else {
+      textsList.appendChild(table);
+    }
+    details.appendChild(textsList);
+
+    const shots = document.createElement("div");
+    shots.className = "screenshots";
+    // ★ case #62: title-mismatch warning(screenshot 实际页面跟 click 的 menu 名不符)
+    // 触发场景:RN dump 含父页 ghost items → upfront discovery 误收 → click stale bounds → 跳错页 → 截图内容跟 path 不符
+    if (item._title_mismatch && item._page_header) {
+      const warn = document.createElement("div");
+      warn.style.cssText = "background:#fff3cd; border-left:3px solid #f5a623; color:#856404; padding:6px 10px; margin-bottom:6px; font-size:11px; font-weight:600;";
+      warn.innerHTML = `⚠ Title mismatch: clicked <code>${item.path.split(" > ").pop()}</code> but screenshot shows <code>${item._page_header}</code>. <br><span style="font-weight:normal;font-style:italic;">RN ghost items from Phase A leaked into Phase B; bounds stale → click landed on different page. Audit content is real, but path label is misleading.</span>`;
+      shots.appendChild(warn);
+    }
+    if (item._screenshot) {
+      const img = document.createElement("img");
+      img.dataset.src = item._screenshot;
+      img.loading = "lazy"; img.title = item._screenshot;
+      img.onclick = () => window.open(item._screenshot, "_blank");
+      shots.appendChild(img);
+    }
+    if (item._faq_screenshots) {
+      const label = document.createElement("div");
+      label.style.fontWeight = "600"; label.style.marginTop = "6px";
+      label.textContent = `FAQ (${item._faq_screenshots.length}):`;
+      shots.appendChild(label);
+      const grid = document.createElement("div"); grid.className = "faq-grid";
+      item._faq_screenshots.forEach(fn => {
+        const img = document.createElement("img");
+        img.dataset.src = fn; img.loading = "lazy"; img.title = fn;
+        img.onclick = () => window.open(fn, "_blank");
+        grid.appendChild(img);
+      });
+      shots.appendChild(grid);
+    }
+    // ★ 2026-05-26(case #51):show scroll frames (related-items 长列表滚动抓取)
+    if (item._scroll_screenshots) {
+      const label = document.createElement("div");
+      label.style.fontWeight = "600"; label.style.marginTop = "6px";
+      label.textContent = `Scroll frames (${item._scroll_screenshots.length}):`;
+      shots.appendChild(label);
+      const grid = document.createElement("div"); grid.className = "faq-grid";
+      item._scroll_screenshots.forEach(fn => {
+        const img = document.createElement("img");
+        img.dataset.src = fn; img.loading = "lazy"; img.title = fn;
+        img.onclick = () => window.open(fn, "_blank");
+        grid.appendChild(img);
+      });
+      shots.appendChild(grid);
+    }
+    if (!item._screenshot && !item._faq_screenshots && !item._scroll_screenshots) {
+      const em = document.createElement("div"); em.className = "empty";
+      em.textContent = "(no screenshot)";
+      shots.appendChild(em);
+    }
+    details.appendChild(shots);
+
+    li.appendChild(details);
+    row.onclick = () => toggleItem(li);
+  }
+  return li;
+}
+
+function toggleItem(li) {
+  const details = li.querySelector(":scope > .details");
+  const row = li.querySelector(":scope > .row");
+  if (!details) return;
+  const open = details.classList.toggle("open");
+  row.classList.toggle("expanded", open);
+  if (open) loadLazyImages(details);
+}
+
+function loadLazyImages(scope) {
+  scope.querySelectorAll("img[data-src]").forEach(img => {
+    img.src = img.dataset.src; delete img.dataset.src;
+  });
+}
+
+function renderTree(tree) {
+  const section = document.createElement("section");
+  section.className = "tree-section";
+  const header = document.createElement("div");
+  header.className = "tree-header";
+  header.textContent = tree.label;
+  const stats = document.createElement("span");
+  stats.className = "stats";
+  const counts = {};
+  tree.items.forEach(it => { counts[it.status] = (counts[it.status] || 0) + 1; });
+  stats.textContent = `${tree.items.length} items · ${Object.entries(counts).map(([k,v]) => `${k}:${v}`).join(", ")}`;
+  header.appendChild(stats);
+  section.appendChild(header);
+
+  const ul = document.createElement("ul"); ul.className = "items";
+  const itemsByPath = {};
+  tree.items.forEach(it => { itemsByPath[it.path] = { item: it, children: [] }; });
+  const roots = [];
+  tree.items.forEach(it => {
+    if (it.path.includes(" > ")) {
+      const parent = it.path.substring(0, it.path.lastIndexOf(" > "));
+      if (itemsByPath[parent]) itemsByPath[parent].children.push(itemsByPath[it.path]);
+      else roots.push(itemsByPath[it.path]);
+    } else {
+      roots.push(itemsByPath[it.path]);
+    }
+  });
+
+  function attachItem(parent, node) {
+    const li = renderItem(node.item);
+    if (node.children.length) {
+      const childUl = document.createElement("ul"); childUl.className = "items";
+      node.children.forEach(c => attachItem(childUl, c));
+      li.appendChild(childUl);
+    }
+    parent.appendChild(li);
+  }
+  roots.forEach(r => attachItem(ul, r));
+  section.appendChild(ul);
+  return section;
+}
+
+// ---------- Finding → menu sync ----------
+function jumpToPath(path) {
+  const target = document.querySelector(`li.item[data-path="${CSS.escape(path)}"]`);
+  if (!target) { console.warn("path not in tree:", path); return; }
+  let p = target.parentElement;
+  while (p) {
+    if (p.tagName === "LI" && p.classList.contains("item")) {
+      const det = p.querySelector(":scope > .details");
+      const row = p.querySelector(":scope > .row");
+      if (det && !det.classList.contains("open")) {
+        det.classList.add("open"); row.classList.add("expanded"); loadLazyImages(det);
+      }
+    }
+    p = p.parentElement;
+  }
+  const tDet = target.querySelector(":scope > .details");
+  const tRow = target.querySelector(":scope > .row");
+  if (tDet && !tDet.classList.contains("open")) {
+    tDet.classList.add("open"); tRow.classList.add("expanded"); loadLazyImages(tDet);
+  }
+  target.scrollIntoView({behavior: "smooth", block: "center"});
+  target.classList.add("flash-highlight");
+  setTimeout(() => target.classList.remove("flash-highlight"), 2500);
+}
+
+// ---------- Filters ----------
+function applyTreeFilters() {
+  const q = document.getElementById("tree-search").value.toLowerCase();
+  const checked = Array.from(document.querySelectorAll(".status-filter:checked")).map(c => c.value);
+  const all = checked.includes("all");
+  const onlyFindings = document.getElementById("only-with-findings").checked;
+  document.querySelectorAll("li.item").forEach(li => {
+    const status = li.dataset.status;
+    let show = all
+      || (checked.includes("captured") && status.startsWith("captured"))
+      || (checked.includes("vanished") && status === "vanished")
+      || (checked.includes("skipped") && status.startsWith("skipped"));
+    if (show && onlyFindings) {
+      // 自己有 findings 或子树里有 findings 都显示(否则父节点 display:none 会连带隐藏子项)
+      show = li.dataset.hasFindings === "1" || li.dataset.hasFindingsSubtree === "1";
+    }
+    if (show && q) {
+      const text = li.querySelector(".row").textContent.toLowerCase();
+      show = text.includes(q);
+    }
+    li.classList.toggle("hidden", !show);
+  });
+}
+function applyFindingsSearch() {
+  const q = document.getElementById("finding-search").value.toLowerCase();
+  document.querySelectorAll(".finding-item").forEach(it => {
+    const t = it.textContent.toLowerCase();
+    it.classList.toggle("hidden", q !== "" && !t.includes(q));
+  });
+  document.querySelectorAll(".finding-group").forEach(g => {
+    const anyVisible = Array.from(g.querySelectorAll(".finding-item")).some(it => !it.classList.contains("hidden"));
+    g.classList.toggle("hidden", !anyVisible);
+  });
+}
+
+// ---------- Versions header ----------
+function renderVersions(d) {
+  const bar = document.getElementById("versions-bar");
+  bar.innerHTML = "";
+  function add(text, cls = "") {
+    const s = document.createElement("span");
+    if (cls) s.className = cls;
+    s.textContent = text;
+    bar.appendChild(s);
+  }
+  if (d.plugin_main) add(`플러그인 (홈) / Plugin (main): ${d.plugin_main}`);
+  if (d.plugin_settings) add(`플러그인 (설정) / Plugin (settings): ${d.plugin_settings}`);
+  if (!d.plugin_main && !d.plugin_settings) add("플러그인 / Plugin: (N/A)", "absent");
+  add(`펌웨어 / Firmware: ${d.firmware || "(N/A)"}`, d.firmware ? "" : "absent");
+}
+
+// ---------- Switch device ----------
+function switchDevice(idx) {
+  if (idx < 0 || idx >= DEVICES.length) return;
+  currentDevice = idx;
+  const d = DEVICES[idx];
+
+  // Tab active
+  document.querySelectorAll(".device-tab").forEach((t, i) => t.classList.toggle("active", i === idx));
+
+  // Title + meta
+  document.getElementById("title").textContent = d.label;
+  document.getElementById("header-meta").textContent =
+    `run: ${RUN_NAME} · trees: ${d.scan_summary.tree_count} · items: ${d.scan_summary.items_count} · findings: ${d.scan_summary.findings_count}`;
+  renderVersions(d);
+
+  // Set per-device findings state
+  ALL_FINDINGS = (d.findings || []).map((f, i) => ({...f, _idx: i}));
+  findingsByPath = {};
+  ALL_FINDINGS.forEach(f => {
+    if (!findingsByPath[f.path]) findingsByPath[f.path] = [];
+    findingsByPath[f.path].push(f);
+  });
+  currentIdx = -1;
+
+  // Re-render content + sidebar
+  const content = document.getElementById("content");
+  content.innerHTML = "";
+  d.trees.forEach(t => content.appendChild(renderTree(t)));
+
+  // ★ 2026-05-15:propagate findings 标记给 ancestor li
+  //   filter 用 display:none 隐藏父节点会把子树也连带隐藏 → finding 子项看不见
+  //   每个有 findings 的 li,把祖先全标 data-has-findings-subtree="1"
+  document.querySelectorAll('li.item[data-has-findings="1"]').forEach(li => {
+    let p = li.parentElement;
+    while (p) {
+      if (p.tagName === "LI" && p.classList.contains("item")) {
+        p.dataset.hasFindingsSubtree = "1";
+      }
+      p = p.parentElement;
+    }
+  });
+
+  renderFindings();
+  applyTreeFilters();
+
+  // Auto-select first finding
+  if (ALL_FINDINGS.length) setTimeout(() => selectFinding(0), 50);
+
+  // URL fragment for deep-link
+  if (IS_MULTI) location.hash = `#device-${idx}`;
+}
+
+// ---------- Init ----------
+// Wire controls
+document.getElementById("tree-search").addEventListener("input", applyTreeFilters);
+document.getElementById("only-with-findings").addEventListener("change", applyTreeFilters);
+
+// ★ case #61: "Show all duplicates" toggle — controls _dedup_texts vs app_texts rendering
+const showAllCb = document.getElementById("show-all-duplicates");
+if (showAllCb) {
+  showAllCb.checked = (localStorage.getItem("show_all_duplicates") === "1");
+  showAllCb.addEventListener("change", () => {
+    localStorage.setItem("show_all_duplicates", showAllCb.checked ? "1" : "0");
+    // 重新渲染当前 device tab(简单 reload 整页保证一致)
+    location.reload();
+  });
+}
+document.querySelectorAll(".status-filter").forEach(cb => {
+  cb.addEventListener("change", e => {
+    if (e.target.value === "all" && e.target.checked) {
+      document.querySelectorAll(".status-filter").forEach(c => { if (c !== e.target) c.checked = false; });
+    } else if (e.target.value !== "all" && e.target.checked) {
+      document.querySelector(".status-filter[value=all]").checked = false;
+    }
+    applyTreeFilters();
+  });
+});
+document.getElementById("finding-search").addEventListener("input", applyFindingsSearch);
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "j") nextFinding();
+  if (e.key === "k") prevFinding();
+  if (e.key === "[" && IS_MULTI) switchDevice(currentDevice > 0 ? currentDevice - 1 : DEVICES.length - 1);
+  if (e.key === "]" && IS_MULTI) switchDevice(currentDevice < DEVICES.length - 1 ? currentDevice + 1 : 0);
+});
+
+// Tab clicks (handled via inline onclick in HTML, but bind here for safety)
+document.querySelectorAll(".device-tab").forEach((tab, i) => {
+  tab.addEventListener("click", () => switchDevice(i));
+});
+
+// Auto-select device from URL fragment or default 0
+const m = location.hash.match(/#device-(\d+)/);
+const initIdx = m ? Math.min(parseInt(m[1]), DEVICES.length - 1) : 0;
+switchDevice(initIdx);
+updateExportBar();
+// Close modal when clicking outside
+document.getElementById("export-modal").addEventListener("click", e => {
+  if (e.target.id === "export-modal") e.currentTarget.classList.remove("open");
+});
+</script>
+</body>
+</html>
